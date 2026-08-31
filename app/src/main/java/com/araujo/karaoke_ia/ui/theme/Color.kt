@@ -2,38 +2,61 @@ package com.araujo.karaoke_ia.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Karaokê Discoteca — Paleta Neon TV ──────────────────────────────────────
+// ── Karaokê IA — Nova Identidade Visual Sofisticada (Lounge & Palco Dourado) ─
 
-// Fundos
-val DiscoBg        = Color(0xFF0A0015)   // fundo geral quase preto
-val DiscoSidebar   = Color(0xFF0F0020)   // sidebar mais escura
-val DiscoCard      = Color(0xFF160030)   // cards com leve roxo
-val DiscoCardAlt   = Color(0xFF1A0035)   // cards alternativos
+// ── Fundos e Superfícies Escuras (Slate / Charcoal) ─────────────────────────
+val DarkCharcoalBg    = Color(0xFF0A0B0E)   // Fundo geral profundo
+val DarkSlateSurface  = Color(0xFF12141C)   // Superfície base
+val DarkCardSurface   = Color(0xFF181B26)   // Cards principais
+val DarkCardElevated  = Color(0xFF222636)   // Cards em destaque / Hover
+val DarkCardBorder    = Color(0x26FFFFFF)   // Borda sutil de card (15% branco)
+val DarkPillBg        = Color(0x33252A3B)   // Fundo de botões em pílula inativos
+val DarkPillBorder    = Color(0x33FFFFFF)   // Borda de pílula inativa
 
-// Neon principais
-val NeonPurple     = Color(0xFF8B00FF)   // roxo neon (botões, seleção)
-val NeonMagenta    = Color(0xFFFF00CC)   // magenta neon (logo, destaques)
-val NeonCyan       = Color(0xFF00FFFF)   // ciano (destaques especiais)
-val NeonPink       = Color(0xFFFF1493)   // rosa choque (coração favorito)
+// ── Dourado / Âmbar / Champagne de Luxo ──────────────────────────────────────
+val GoldPrimary       = Color(0xFFF3C768)   // Dourado primário (foco, textos chave)
+val GoldAccent        = Color(0xFFE5A93C)   // Dourado quente (botões, badges)
+val GoldDark          = Color(0xFFC68A24)   // Dourado escuro para degradês
+val GoldGlow          = Color(0xFFFFE599)   // Brilho dourado intenso
+val GoldBadgeBg       = Color(0x2AF3C768)   // Fundo translúcido dourado
+val GoldBadgeBorder   = Color(0x80F3C768)   // Borda dourada translúcida
+val FocusGold         = Color(0xFFF3C768)   // Cor padrão do anel de foco da TV
 
-// Cores de texto e acento
-val DiscoGold      = Color(0xFFFFD700)   // dourado (estrela, pontos)
-val DiscoGreen     = Color(0xFF00FF88)   // verde (performance OK)
-val DiscoAmber     = Color(0xFFFFAA00)   // âmbar (pontos secundários)
+// ── Bronze e Tons Quentes de Palco ──────────────────────────────────────────
+val BronzeSurface     = Color(0xFF282015)   // Superfície bronze para cards especiais
+val BronzeBorder      = Color(0xFF5A4525)   // Borda bronze
+val BronzeGradient1   = Color(0xFF3D2E17)   // Degradê bronze início
+val BronzeGradient2   = Color(0xFF1F160A)   // Degradê bronze fim
 
-// Superfícies semitransparentes
-val GlassSurface   = Color(0x331A0035)   // glass card com alpha
-val GlassBorder    = Color(0x558B00FF)   // borda glass roxo
+// ── Tipografia e Neutros ────────────────────────────────────────────────────
+val TextWhite         = Color(0xFFFFFFFF)   // Texto branco puro
+val TextOffWhite      = Color(0xFFEDEDF2)   // Texto principal quase branco
+val TextMuted         = Color(0xFF9FA4B2)   // Texto secundário cinza médio
+val TextSubtle        = Color(0xFF6B7282)   // Texto terciário / legendas
 
-// Sidebar botão selecionado
-val SidebarSelected = Color(0xFF6B00CC)  // roxo escuro mais sólido
+// ── Cores Funcionais ────────────────────────────────────────────────────────
+val HeartRed          = Color(0xFFEF4444)   // Coração de favoritos
+val ScoreGreen        = Color(0xFF34D399)   // Verde positivo
+val ScoreGold         = Color(0xFFFBBF24)   // Dourado excelente
 
-// Legados / compatibilidade
-val DeepSpace      = Color(0xFF0A0015)
-val NightBlue      = Color(0xFF160030)
-val ElectricYellow = Color(0xFFFFD700)
-
-// Fallbacks Material
-val Purple80       = Color(0xFFD0BCFF)
-val PurpleGrey80   = Color(0xFFCCC2DC)
-val Pink80         = Color(0xFFEFB8C8)
+// ── Aliases de Retrocompatibilidade ─────────────────────────────────────────
+val DiscoBg           = DarkCharcoalBg
+val DiscoSidebar      = DarkSlateSurface
+val DiscoCard         = DarkCardSurface
+val DiscoCardAlt      = DarkCardElevated
+val DiscoGold         = GoldPrimary
+val DiscoGreen        = ScoreGreen
+val DiscoAmber        = GoldAccent
+val NeonPurple        = GoldAccent
+val NeonMagenta       = GoldPrimary
+val NeonPink          = HeartRed
+val NeonCyan          = GoldPrimary
+val DeepSpace         = DarkCharcoalBg
+val NightBlue         = DarkSlateSurface
+val GlassSurface      = DarkCardSurface
+val GlassBorder       = DarkCardBorder
+val SidebarSelected   = GoldPrimary
+val ElectricYellow    = GoldPrimary
+val Purple80          = GoldPrimary
+val PurpleGrey80      = TextMuted
+val Pink80            = GoldAccent

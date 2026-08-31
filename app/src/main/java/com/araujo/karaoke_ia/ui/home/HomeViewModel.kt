@@ -10,18 +10,33 @@ import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.MusicRepository
 import com.araujo.karaoke_ia.data.QueueRepository
+import com.araujo.karaoke_ia.data.ScoreRepository
+import com.araujo.karaoke_ia.data.UserScoreEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// ── Abas da sidebar ──────────────────────────────────────────────────────────
-enum class HomeTab { PESQUISAR, FILTROS, FAVORITOS, HISTORICO, FILA }
+// ── Abas de Navegação Superior (Pill Tabs) ──────────────────────────────────
+enum class HomeTab {
+    INICIO,
+    MUSICAS,
+    PESQUISAR,
+    FILA,
+    RANKING,
+    FAVORITOS;
+
+    companion object {
+        val FILTROS = MUSICAS
+        val HISTORICO = INICIO
+    }
+}
 
 class HomeViewModel(
     private val musicRepository: MusicRepository,
     private val favoritesRepo: FavoritesRepository,
     private val historyRepo: HistoryRepository,
-    private val queueRepo: QueueRepository
+    private val queueRepo: QueueRepository,
+    private val scoreRepo: ScoreRepository
 ) : ViewModel() {
 
     // ── Busca / código ────────────────────────────────────────────────────────
@@ -48,17 +63,22 @@ class HomeViewModel(
 
     // ── Navegação ─────────────────────────────────────────────────────────────
 
-    private val _selectedTab = mutableStateOf(HomeTab.PESQUISAR)
+    private val _selectedTab = mutableStateOf(HomeTab.INICIO)
     val selectedTab: State<HomeTab> = _selectedTab
 
     // ── Dados do HD ───────────────────────────────────────────────────────────
 
     /** Catálogo completo do HD */
     private val _allMusics = mutableStateOf<List<MusicFile>>(emptyList())
+    val allMusics: State<List<MusicFile>> = _allMusics
 
-    /** Lista exibida na aba PESQUISAR (filtrada por searchQuery) */
+    /** Lista exibida na aba PESQUISAR / MÚSICAS (filtrada por searchQuery) */
     private val _filteredMusics = mutableStateOf<List<MusicFile>>(emptyList())
     val filteredMusics: State<List<MusicFile>> = _filteredMusics
+
+    /** Música em destaque na tela de busca */
+    private val _selectedSearchMusic = mutableStateOf<MusicFile?>(null)
+    val selectedSearchMusic: State<MusicFile?> = _selectedSearchMusic
 
     /** Estado de carregamento do HD */
     private val _isLoading = mutableStateOf(true)
@@ -103,20 +123,22 @@ class HomeViewModel(
     private val _queueMusics = mutableStateOf<List<MusicFile>>(emptyList())
     val queueMusics: State<List<MusicFile>> = _queueMusics
 
-    // ── Última música ─────────────────────────────────────────────────────────
+    // ── Minhas Pontuações Reais ───────────────────────────────────────────────
 
-    private val _lastMusic = mutableStateOf<MusicFile?>(null)
-    val lastMusic: State<MusicFile?> = _lastMusic
-
-    private val _lastScore = mutableStateOf(0)
-    val lastScore: State<Int> = _lastScore
+    private val _myBestScores = mutableStateOf<List<UserScoreEntry>>(emptyList())
+    val myBestScores: State<List<UserScoreEntry>> = _myBestScores
 
     // ── Init ──────────────────────────────────────────────────────────────────
 
     init {
         _favorites.value = favoritesRepo.getFavorites()
         _queueCodes.value = queueRepo.getQueue()
+        loadScores()
         loadAllMusics()
+    }
+
+    fun loadScores() {
+        _myBestScores.value = scoreRepo.getBestScores()
     }
 
     // ── Carregamento do HD ────────────────────────────────────────────────────
@@ -142,6 +164,7 @@ class HomeViewModel(
             refreshFavoriteMusics(musics)
             refreshHistoryMusics(musics)
             refreshQueueMusics(musics)
+            loadScores()
 
             _isLoading.value = false
         }
@@ -183,10 +206,12 @@ class HomeViewModel(
     }
 
     private fun updateQuickMatchedMusic(code: String) {
-        // Tenta encontrar correspondência exata primeiro ou com zero à esquerda
         val padded = code.padStart(5, '0')
         val match = _allMusics.value.firstOrNull { it.code == code || it.code == padded }
         _quickMatchedMusic.value = match
+        if (match != null) {
+            _selectedSearchMusic.value = match
+        }
     }
 
     // ── Busca ─────────────────────────────────────────────────────────────────
@@ -202,8 +227,12 @@ class HomeViewModel(
         applySearchFilter(query, _allMusics.value)
     }
 
+    fun selectSearchMusic(music: MusicFile) {
+        _selectedSearchMusic.value = music
+    }
+
     private fun applySearchFilter(query: String, all: List<MusicFile>) {
-        _filteredMusics.value = if (query.isBlank()) {
+        val filtered = if (query.isBlank()) {
             all
         } else {
             val q = query.trim().lowercase()
@@ -213,15 +242,26 @@ class HomeViewModel(
                 it.artist.lowercase().contains(q)
             }
         }
+        _filteredMusics.value = filtered
+        if (filtered.isNotEmpty()) {
+            if (_selectedSearchMusic.value == null || !filtered.contains(_selectedSearchMusic.value)) {
+                _selectedSearchMusic.value = filtered.first()
+            }
+        } else {
+            _selectedSearchMusic.value = null
+        }
     }
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
 
     fun onTabSelected(tab: HomeTab) {
         _selectedTab.value = tab
-        if (tab == HomeTab.FILTROS) {
+        if (tab == HomeTab.MUSICAS) {
             _selectedArtist.value = null
             _artistMusics.value   = emptyList()
+        }
+        if (tab == HomeTab.RANKING || tab == HomeTab.INICIO) {
+            loadScores()
         }
     }
 
@@ -257,13 +297,6 @@ class HomeViewModel(
 
     // ── Histórico ─────────────────────────────────────────────────────────────
 
-    fun onMusicPlayed(music: MusicFile, score: Int) {
-        historyRepo.addToHistory(music.code)
-        _lastMusic.value = music
-        _lastScore.value = score
-        refreshHistoryMusics(_allMusics.value)
-    }
-
     private fun refreshHistoryMusics(musics: List<MusicFile>) {
         val codes    = historyRepo.getHistory()
         val musicMap = musics.associateBy { it.code }
@@ -291,13 +324,6 @@ class HomeViewModel(
         _queueMusics.value = emptyList()
     }
 
-    fun popNextInQueue(): String? {
-        val next = queueRepo.popNext()
-        _queueCodes.value = queueRepo.getQueue()
-        refreshQueueMusics(_allMusics.value)
-        return next
-    }
-
     private fun refreshQueueMusics(musics: List<MusicFile>) {
         val codes    = queueRepo.getQueue()
         val musicMap = musics.associateBy { it.code }
@@ -310,10 +336,11 @@ class HomeViewModel(
         private val musicRepository: MusicRepository,
         private val favoritesRepo: FavoritesRepository,
         private val historyRepo: HistoryRepository,
-        private val queueRepo: QueueRepository
+        private val queueRepo: QueueRepository,
+        private val scoreRepo: ScoreRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            HomeViewModel(musicRepository, favoritesRepo, historyRepo, queueRepo) as T
+            HomeViewModel(musicRepository, favoritesRepo, historyRepo, queueRepo, scoreRepo) as T
     }
 }

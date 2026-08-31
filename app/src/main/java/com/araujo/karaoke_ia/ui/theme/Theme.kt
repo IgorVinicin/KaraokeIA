@@ -12,15 +12,15 @@ fun KaraokeIATheme(
     content: @Composable () -> Unit,
 ) {
     val colorScheme = darkColorScheme(
-        primary      = NeonPurple,          // roxo neon — botões principais, seleção
-        secondary    = NeonMagenta,         // magenta neon — logo accent, ícones
-        tertiary     = DiscoGold,           // dourado — estrela, pontos
-        background   = DiscoBg,            // fundo geral quase preto
-        surface      = DiscoCard,          // superfície de cards
-        onPrimary    = Color.White,
+        primary      = GoldPrimary,         // Dourado primário — foco, seleção
+        secondary    = GoldAccent,          // Dourado âmbar — destaques
+        tertiary     = BronzeBorder,        // Bronze
+        background   = DarkCharcoalBg,      // Fundo ardósia escuro
+        surface      = DarkCardSurface,     // Superfície de cards
+        onPrimary    = DarkCharcoalBg,      // Texto escuro sobre botão dourado
         onSecondary  = Color.White,
-        onBackground = Color.White,
-        onSurface    = Color.White
+        onBackground = TextWhite,
+        onSurface    = TextOffWhite
     )
 
     MaterialTheme(

@@ -11,6 +11,7 @@ import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicRepository
 import com.araujo.karaoke_ia.data.QueueRepository
+import com.araujo.karaoke_ia.data.ScoreRepository
 import com.araujo.karaoke_ia.ui.home.HomeScreen
 import com.araujo.karaoke_ia.ui.home.HomeViewModel
 import com.araujo.karaoke_ia.ui.player.PlayerScreen
@@ -33,7 +34,8 @@ fun NavGraph(
     musicRepository: MusicRepository,
     favoritesRepository: FavoritesRepository,
     historyRepository: HistoryRepository,
-    queueRepository: QueueRepository
+    queueRepository: QueueRepository,
+    scoreRepository: ScoreRepository
 ) {
     NavHost(
         navController    = navController,
@@ -46,7 +48,8 @@ fun NavGraph(
                     musicRepository    = musicRepository,
                     favoritesRepo      = favoritesRepository,
                     historyRepo        = historyRepository,
-                    queueRepo          = queueRepository
+                    queueRepo          = queueRepository,
+                    scoreRepo          = scoreRepository
                 )
             )
             HomeScreen(
@@ -67,7 +70,8 @@ fun NavGraph(
             val playerViewModel: PlayerViewModel = viewModel(
                 factory = PlayerViewModel.Factory(
                     repository        = musicRepository,
-                    historyRepository = historyRepository
+                    historyRepository = historyRepository,
+                    scoreRepository   = scoreRepository
                 )
             )
 
@@ -76,6 +80,7 @@ fun NavGraph(
                 viewModel = playerViewModel,
                 onBack    = { navController.popBackStack() },
                 onFinish  = { score, feedback ->
+                    playerViewModel.recordScore(score)
                     navController.navigate(Screen.Score.createRoute(score, feedback)) {
                         popUpTo(Screen.Home.route)
                     }

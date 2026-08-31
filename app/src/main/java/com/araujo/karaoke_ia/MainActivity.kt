@@ -13,6 +13,7 @@ import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicRepositoryImpl
 import com.araujo.karaoke_ia.data.QueueRepository
+import com.araujo.karaoke_ia.data.ScoreRepository
 import com.araujo.karaoke_ia.data.StorageManager
 import com.araujo.karaoke_ia.navigation.NavGraph
 import com.araujo.karaoke_ia.ui.theme.KaraokeIATheme
@@ -25,9 +26,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var favoritesRepository: FavoritesRepository
     private lateinit var historyRepository: HistoryRepository
     private lateinit var queueRepository: QueueRepository
+    private lateinit var scoreRepository: ScoreRepository
 
     private fun findExternalStoragePath(): String {
-        // 1. Verifica se existe pendrive / HD externo conectado via USB
         val storageDir = File("/storage")
         val externalDrive = storageDir.listFiles()
             ?.find { it.isDirectory && it.name != "emulated" && it.name != "self" }
@@ -38,10 +39,9 @@ class MainActivity : ComponentActivity() {
                 .firstOrNull { it.exists() }
                 ?.let { return it.absolutePath }
 
-            return externalDrive.absolutePath   // raiz do HD se não achou subpasta
+            return externalDrive.absolutePath
         }
 
-        // 2. Verifica pastas padrão do armazenamento interno / emulador
         val extStorage = android.os.Environment.getExternalStorageDirectory().absolutePath
         val possiblePaths = listOf(
             "$extStorage/Download/MUSICAS",
@@ -67,13 +67,12 @@ class MainActivity : ComponentActivity() {
         favoritesRepository = FavoritesRepository(this)
         historyRepository   = HistoryRepository(this)
         queueRepository     = QueueRepository(this)
+        scoreRepository     = ScoreRepository(this)
 
-        // Detecta path do HD/USB se ainda não foi configurado
         if (storageManager.rootPath == null) {
             storageManager.rootPath = findExternalStoragePath()
         }
 
-        // Solicita permissão de acesso total a arquivos (necessário para HD externo)
         if (!storageManager.hasAllFilesPermission()) {
             storageManager.requestAllFilesPermission()
         }
@@ -90,7 +89,8 @@ class MainActivity : ComponentActivity() {
                         musicRepository     = musicRepository,
                         favoritesRepository = favoritesRepository,
                         historyRepository   = historyRepository,
-                        queueRepository     = queueRepository
+                        queueRepository     = queueRepository,
+                        scoreRepository     = scoreRepository
                     )
                 }
             }

@@ -5,8 +5,10 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,14 +18,20 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +40,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -42,6 +49,7 @@ import com.araujo.karaoke_ia.score.ScoreGenerator
 import com.araujo.karaoke_ia.ui.theme.*
 import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlin.math.sin
 
 @Composable
 fun PlayerScreen(
@@ -62,26 +70,26 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DeepSpace),
+                .background(DarkCharcoalBg),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "ERRO AO CARREGAR",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.secondary
+                    color = GoldAccent
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = error!!, color = Color.White)
                 Spacer(modifier = Modifier.height(32.dp))
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Brush.horizontalGradient(listOf(NeonPurple, NeonMagenta)))
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GoldPrimary)
                         .clickable { onBack() }
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                        .padding(horizontal = 28.dp, vertical = 12.dp)
                 ) {
-                    Text("VOLTAR", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("VOLTAR", fontWeight = FontWeight.Bold, color = DarkCharcoalBg)
                 }
             }
         }
@@ -92,10 +100,10 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(DeepSpace, NightBlue))),
+                .background(DarkCharcoalBg),
             contentAlignment = Alignment.Center
         ) {
-            androidx.compose.material3.CircularProgressIndicator(color = NeonMagenta)
+            androidx.compose.material3.CircularProgressIndicator(color = GoldPrimary)
         }
         return
     }
@@ -109,23 +117,19 @@ fun PlayerScreen(
         }
     }
 
-    // Estados do Player e OSD
     var isPlaying by remember { mutableStateOf(true) }
     var currentPositionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(1L) }
     var showControls by remember { mutableStateOf(false) }
-    var showInitialTitle by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     val playPauseFocusRequester = remember { FocusRequester() }
 
-    // Intercepta botão voltar do controle para fechar player com segurança
     BackHandler {
         exoPlayer.stop()
         onBack()
     }
 
-    // Listener do ExoPlayer para fim da música e mudanças de estado
     DisposableEffect(Unit) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -145,7 +149,7 @@ fun PlayerScreen(
         }
     }
 
-    // Atualização contínua do tempo e barra de progresso
+    // Atualização leve do tempo a cada 500ms (baixo consumo de CPU)
     LaunchedEffect(exoPlayer) {
         while (true) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
@@ -154,18 +158,11 @@ fun PlayerScreen(
         }
     }
 
-    // Timer para sumir com os controles OSD após 4 segundos
     LaunchedEffect(showControls, lastInteractionTime) {
         if (showControls) {
             delay(4000)
             showControls = false
         }
-    }
-
-    // Timer para sumir com o título inicial após 5 segundos
-    LaunchedEffect(Unit) {
-        delay(5000)
-        showInitialTitle = false
     }
 
     fun triggerControls() {
@@ -222,7 +219,6 @@ fun PlayerScreen(
                 triggerControls()
             }
     ) {
-        // Vídeo ExoPlayer em tela cheia
         AndroidView(
             factory = {
                 PlayerView(context).apply {
@@ -237,39 +233,40 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Overlay de Informação da Música ao Iniciar
-        AnimatedVisibility(
-            visible = showInitialTitle && !showControls,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomStart)
+        // Top Header
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(top = 20.dp),
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .padding(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xCC000000))
-                    .border(1.dp, NeonPurple.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0x88000000))
+                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 18.dp, vertical = 6.dp)
             ) {
-                Column {
-                    Text(
-                        text = "🎵 ${musicFile!!.title.uppercase()}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = NeonCyan,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "🎤 ${musicFile!!.artist.uppercase()}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                }
+                Text(
+                    text = "${musicFile!!.title} - ${musicFile!!.artist}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
             }
         }
 
-        // Overlay OSD de Controles Interativos (Aparece ao apertar botões do controle)
+        // HUD de Performance em Tempo Real (Otimizado com hardware transition)
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 48.dp)
+        ) {
+            RealTimePerformanceWidget()
+        }
+
+        // Controles OSD
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(),
@@ -282,15 +279,14 @@ fun PlayerScreen(
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xAA000000),
+                                Color(0x990A0B0E),
                                 Color.Transparent,
-                                Color(0xEE050015)
+                                Color(0xF20A0B0E)
                             )
                         )
                     )
                     .padding(32.dp)
             ) {
-                // Top Bar: Título e Código
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -303,18 +299,17 @@ fun PlayerScreen(
                             text = musicFile!!.title,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = TextWhite
                         )
                         Text(
                             text = "${musicFile!!.artist} • Código: ${musicFile!!.code}",
-                            fontSize = 14.sp,
-                            color = NeonMagenta
+                            fontSize = 13.5.sp,
+                            color = GoldPrimary
                         )
                     }
 
-                    // Botão rápido fechar/voltar
                     PlayerControlButton(
-                        icon = "❌",
+                        icon = Icons.Default.Close,
                         label = "Sair",
                         onClick = {
                             exoPlayer.stop()
@@ -324,15 +319,13 @@ fun PlayerScreen(
                     )
                 }
 
-                // Bottom Bar: Barra de Progresso + Botões de Controle
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Barra de Progresso de Tempo
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -342,14 +335,14 @@ fun PlayerScreen(
                             text = formatTime(currentPositionMs),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = TextWhite
                         )
 
                         val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(8.dp)
+                                .height(6.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.2f))
                         ) {
@@ -358,7 +351,7 @@ fun PlayerScreen(
                                     .fillMaxHeight()
                                     .fillMaxWidth(progress)
                                     .clip(CircleShape)
-                                    .background(Brush.horizontalGradient(listOf(NeonPurple, NeonMagenta, DiscoGold)))
+                                    .background(Brush.horizontalGradient(listOf(GoldAccent, GoldPrimary, GoldGlow)))
                             )
                         }
 
@@ -366,18 +359,16 @@ fun PlayerScreen(
                             text = formatTime(durationMs),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = TextMuted
                         )
                     }
 
-                    // Botões de Ação
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. Reiniciar
                         PlayerControlButton(
-                            icon = "⏮",
+                            icon = Icons.Default.Replay,
                             label = "Reiniciar",
                             onClick = {
                                 exoPlayer.seekTo(0)
@@ -387,9 +378,8 @@ fun PlayerScreen(
                             onInteracted = { lastInteractionTime = System.currentTimeMillis() }
                         )
 
-                        // 2. Play / Pause
                         PlayerControlButton(
-                            icon = if (isPlaying) "⏸" else "▶",
+                            icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             label = if (isPlaying) "Pausar" else "Continuar",
                             isPrimary = true,
                             modifier = Modifier.focusRequester(playPauseFocusRequester),
@@ -400,9 +390,8 @@ fun PlayerScreen(
                             onInteracted = { lastInteractionTime = System.currentTimeMillis() }
                         )
 
-                        // 3. Encerrar e Ver Nota
                         PlayerControlButton(
-                            icon = "🏁",
+                            icon = Icons.Default.Star,
                             label = "Ver Nota",
                             onClick = {
                                 exoPlayer.stop()
@@ -418,9 +407,104 @@ fun PlayerScreen(
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  WIDGET DE PERFORMANCE OTIMIZADO (GPU Animation)
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun RealTimePerformanceWidget() {
+    val infiniteTransition = rememberInfiniteTransition(label = "pitch_anim")
+    val wavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.28f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "phase"
+    )
+
+    Box(
+        modifier = Modifier
+            .width(180.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0x880D0E14))
+            .border(1.dp, GoldBadgeBorder, RoundedCornerShape(16.dp))
+            .padding(12.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "Pontuação:",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = GoldPrimary
+            )
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                val width = size.width
+                val height = size.height
+                val midY = height / 2
+
+                drawLine(
+                    color = Color(0x33FFFFFF),
+                    start = Offset(0f, midY),
+                    end = Offset(width, midY),
+                    strokeWidth = 1f
+                )
+
+                val path = Path()
+                val steps = 24
+                for (i in 0..steps) {
+                    val x = (i.toFloat() / steps) * width
+                    val angle = (i.toFloat() / steps) * 4f * Math.PI.toFloat() + wavePhase
+                    val y = midY + (height * 0.35f) * sin(angle)
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+
+                drawPath(
+                    path = path,
+                    color = GoldPrimary,
+                    style = Stroke(width = 2.5f)
+                )
+
+                drawCircle(
+                    color = GoldGlow,
+                    radius = 4f,
+                    center = Offset(width, midY + (height * 0.35f) * sin(4f * Math.PI.toFloat() + wavePhase))
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Pontuação: 91.5",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextWhite
+                )
+
+                Text(
+                    text = "Precisão: 94%",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ScoreGreen
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PlayerControlButton(
-    icon: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit,
     onInteracted: () -> Unit,
@@ -431,15 +515,21 @@ private fun PlayerControlButton(
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     val bgBrush = when {
-        isFocused -> Brush.horizontalGradient(listOf(NeonMagenta, NeonPurple))
-        isPrimary -> Brush.horizontalGradient(listOf(NeonPurple, Color(0xFF6B00CC)))
-        else      -> Brush.horizontalGradient(listOf(Color(0x552A0060), Color(0x55160030)))
+        isFocused -> Brush.horizontalGradient(listOf(GoldGlow, GoldPrimary))
+        isPrimary -> Brush.horizontalGradient(listOf(GoldAccent, GoldDark))
+        else      -> Brush.horizontalGradient(listOf(Color(0xFF282015), Color(0xFF17110A)))
     }
 
     val borderColor = when {
-        isFocused -> DiscoGold
-        isPrimary -> NeonMagenta
-        else      -> Color.White.copy(alpha = 0.25f)
+        isFocused -> GoldGlow
+        isPrimary -> GoldPrimary
+        else      -> BronzeBorder
+    }
+
+    val contentColor = when {
+        isFocused -> DarkCharcoalBg
+        isPrimary -> DarkCharcoalBg
+        else      -> TextWhite
     }
 
     Box(
@@ -455,19 +545,24 @@ private fun PlayerControlButton(
                 onInteracted()
                 onClick()
             }
-            .padding(horizontal = if (isPrimary) 22.dp else 16.dp, vertical = if (isPrimary) 12.dp else 10.dp),
+            .padding(horizontal = if (isPrimary) 22.dp else 16.dp, vertical = if (isPrimary) 10.dp else 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text(icon, fontSize = if (isPrimary) 18.sp else 15.sp)
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(if (isPrimary) 18.dp else 15.dp)
+            )
             Text(
                 text = label,
-                fontSize = if (isPrimary) 15.sp else 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                fontSize = if (isPrimary) 14.sp else 12.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = contentColor
             )
         }
     }

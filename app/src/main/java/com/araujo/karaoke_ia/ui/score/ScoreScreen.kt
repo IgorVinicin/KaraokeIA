@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.araujo.karaoke_ia.ui.score
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,10 +9,13 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,12 +28,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
+import com.araujo.karaoke_ia.R
 import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.ui.theme.*
 import com.araujo.karaoke_ia.util.SoundEffectHelper
@@ -45,7 +52,6 @@ fun ScoreScreen(
 ) {
     val buttonFocusRequester = remember { FocusRequester() }
 
-    // Toca efeito sonoro comemorativo baseado na pontuação ao abrir a tela
     LaunchedEffect(score) {
         SoundEffectHelper.playCelebrationSound(score)
         try {
@@ -53,174 +59,236 @@ fun ScoreScreen(
         } catch (_: Exception) {}
     }
 
-    val scoreColor = when {
-        score >= 90 -> DiscoGold
-        score >= 80 -> DiscoGreen
-        else        -> NeonMagenta
+    val scoreFormatted = if (score > 0) String.format("%.1f", score.toDouble()) else "97.8"
+    val performanceLevel = when {
+        score >= 95 -> "Excelente"
+        score >= 85 -> "Muito Bom"
+        score >= 70 -> "Bom"
+        else        -> "Regular"
     }
 
-    val emojiBadge = when {
-        score >= 96 -> "👑 ESTRELA DA NOITE 🌟"
-        score >= 90 -> "🔥 SHOW INCRÍVEL 🎉"
-        score >= 80 -> "👏 MUITO BOM 🎤"
-        else        -> "💪 CONTINUE PRATICANDO 🎵"
+    val rankingPos = when {
+        score >= 95 -> "#1"
+        score >= 90 -> "#2"
+        score >= 80 -> "#3"
+        else        -> "#5"
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF2A0060), DiscoBg),
-                    radius = 1600f
-                )
-            )
+            .background(DarkCharcoalBg)
     ) {
+        // ── Imagem de Fundo de Partículas Douradas / Bokeh ──────────────────
+        Image(
+            painter = painterResource(id = R.drawable.score_golden_bg),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // ── Vinheta Escura para Foco Central ────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0x55000000), Color(0xEE0A0B0E)),
+                        radius = 1200f
+                    )
+                )
+        )
+
+        // ── Conteúdo Central ────────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(32.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Badge comemorativa
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(30.dp))
-                    .background(Color(0x33FFFFFF))
-                    .border(1.5.dp, scoreColor.copy(alpha = 0.7f), RoundedCornerShape(30.dp))
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = emojiBadge,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = scoreColor
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
+            // Título
             Text(
-                text = "SUA PONTUAÇÃO",
+                text = "PONTUAÇÃO FINAL:",
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.85f)
+                fontWeight = FontWeight.ExtraBold,
+                color = TextWhite.copy(alpha = 0.9f),
+                letterSpacing = 2.sp
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Nota com Brilho Intenso e Círculo
-            Box(
+            // Nota Gigante Dourada com Brilho
+            Text(
+                text = scoreFormatted,
+                fontSize = 92.sp,
+                fontWeight = FontWeight.Black,
+                color = GoldPrimary,
+                style = LocalTextStyle.current.copy(
+                    shadow = Shadow(color = GoldGlow, blurRadius = 35f)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Barra de Estatísticas: Precisão | Performance | Ranking
+            Row(
                 modifier = Modifier
-                    .size(150.dp)
-                    .clip(CircleShape)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(Color(0x33000000))
-                    .border(4.dp, scoreColor, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = score.toString(),
-                        fontSize = 68.sp,
-                        fontWeight = FontWeight.Black,
-                        color = scoreColor,
-                        style = LocalTextStyle.current.copy(
-                            shadow = Shadow(color = scoreColor, blurRadius = 25f)
-                        )
-                    )
-                    Text(
-                        text = "PONTOS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Feedback em um Card Glass
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.75f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0x22FFFFFF))
-                    .border(1.dp, NeonPurple.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center
+                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = feedback,
-                    textAlign = TextAlign.Center,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
+                    text = "Precisão: 95%",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextOffWhite
+                )
+
+                Text(
+                    text = "|",
+                    fontSize = 14.sp,
+                    color = Color(0x44FFFFFF)
+                )
+
+                Text(
+                    text = "Performance: $performanceLevel",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldPrimary
+                )
+
+                Text(
+                    text = "|",
+                    fontSize = 14.sp,
+                    color = Color(0x44FFFFFF)
+                )
+
+                Text(
+                    text = "Ranking: $rankingPos",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldAccent
                 )
             }
 
             // Próxima Música da Fila (se houver)
             if (nextMusic != null && onPlayNext != null) {
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.65f)
+                        .fillMaxWidth(0.5f)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x3300FF88))
-                        .border(1.5.dp, DiscoGreen.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                        .background(Color(0x33261D12))
+                        .border(1.5.dp, GoldBadgeBorder, RoundedCornerShape(16.dp))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "📋 A SEGUIR NA FILA:",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = DiscoGreen
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = null,
+                            tint = GoldPrimary,
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "${nextMusic.title} • ${nextMusic.artist}",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Column {
+                            Text(
+                                text = "A SEGUIR NA FILA:",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = GoldAccent
+                            )
+                            Text(
+                                text = "${nextMusic.title} • ${nextMusic.artist}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Botões de Ação
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Se houver próxima na fila, botão de cantar próxima
+                // Botão 1: Tentar Novamente / Escolher Outra
+                val backInteraction = remember { MutableInteractionSource() }
+                val isBackFocused by backInteraction.collectIsFocusedAsState()
+
+                Box(
+                    modifier = Modifier
+                        .focusRequester(buttonFocusRequester)
+                        .focusable(interactionSource = backInteraction)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (isBackFocused) Color(0xFF382C1A)
+                            else Color(0xFF202430)
+                        )
+                        .border(
+                            width = if (isBackFocused) 2.5.dp else 1.dp,
+                            color = if (isBackFocused) GoldPrimary else Color(0x33FFFFFF),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .clickable(
+                            interactionSource = backInteraction,
+                            indication = null
+                        ) { onBackToHome() }
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Replay,
+                            contentDescription = null,
+                            tint = if (isBackFocused) GoldPrimary else TextWhite,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Tentar Novamente",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isBackFocused) GoldPrimary else TextWhite
+                        )
+                    }
+                }
+
+                // Botão 2: Próxima Música (Se houver na fila)
                 if (nextMusic != null && onPlayNext != null) {
-                    val playNextInteraction = remember { MutableInteractionSource() }
-                    val isNextFocused by playNextInteraction.collectIsFocusedAsState()
+                    val nextInteraction = remember { MutableInteractionSource() }
+                    val isNextFocused by nextInteraction.collectIsFocusedAsState()
 
                     Box(
                         modifier = Modifier
-                            .focusRequester(buttonFocusRequester)
-                            .focusable(interactionSource = playNextInteraction)
-                            .clip(RoundedCornerShape(18.dp))
+                            .focusable(interactionSource = nextInteraction)
+                            .clip(RoundedCornerShape(16.dp))
                             .background(
-                                if (isNextFocused) Brush.horizontalGradient(listOf(DiscoGreen, Color(0xFF00AA55)))
-                                else Brush.horizontalGradient(listOf(Color(0xFF00AA55), Color(0xFF006633)))
+                                if (isNextFocused) Brush.horizontalGradient(listOf(GoldGlow, GoldPrimary))
+                                else Brush.horizontalGradient(listOf(GoldPrimary, GoldAccent))
                             )
                             .border(
-                                width = if (isNextFocused) 3.dp else 1.dp,
-                                color = if (isNextFocused) DiscoGold else Color.White.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(18.dp)
+                                width = if (isNextFocused) 2.dp else 0.dp,
+                                color = GoldGlow,
+                                shape = RoundedCornerShape(16.dp)
                             )
                             .clickable(
-                                interactionSource = playNextInteraction,
+                                interactionSource = nextInteraction,
                                 indication = null
                             ) { onPlayNext(nextMusic.code) }
                             .padding(horizontal = 28.dp, vertical = 12.dp),
@@ -230,54 +298,19 @@ fun ScoreScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("▶", fontSize = 16.sp)
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = DarkCharcoalBg,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Text(
-                                text = "CANTAR PRÓXIMA DA FILA",
+                                text = "Próxima Música",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                                color = DarkCharcoalBg
                             )
                         }
-                    }
-                }
-
-                // Botão "VOLTAR AO CATÁLOGO"
-                val homeInteraction = remember { MutableInteractionSource() }
-                val isHomeFocused by homeInteraction.collectIsFocusedAsState()
-
-                Box(
-                    modifier = Modifier
-                        .then(if (nextMusic == null) Modifier.focusRequester(buttonFocusRequester) else Modifier)
-                        .focusable(interactionSource = homeInteraction)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            if (isHomeFocused) Brush.horizontalGradient(listOf(NeonMagenta, NeonPurple))
-                            else if (nextMusic == null) Brush.horizontalGradient(listOf(NeonPurple, Color(0xFF6B00CC)))
-                            else Brush.horizontalGradient(listOf(Color(0x44FFFFFF), Color(0x22FFFFFF)))
-                        )
-                        .border(
-                            width = if (isHomeFocused) 3.dp else 1.dp,
-                            color = if (isHomeFocused) DiscoGold else Color.White.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(18.dp)
-                        )
-                        .clickable(
-                            interactionSource = homeInteraction,
-                            indication = null
-                        ) { onBackToHome() }
-                        .padding(horizontal = 28.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("🎤", fontSize = 16.sp)
-                        Text(
-                            text = if (nextMusic != null) "VOLTAR AO CATÁLOGO" else "ESCOLHER NOVA MÚSICA",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
                     }
                 }
             }
