@@ -143,13 +143,13 @@ class HomeViewModel(
 
     // ── Carregamento do HD ────────────────────────────────────────────────────
 
-    fun loadAllMusics() {
+    fun loadAllMusics(forceRefresh: Boolean = false) {
         viewModelScope.launch {
             _isLoading.value = true
             _loadError.value = null
 
             val musics = withContext(Dispatchers.IO) {
-                try { musicRepository.scanAllMusics() }
+                try { musicRepository.scanAllMusics(forceRefresh) }
                 catch (e: Exception) { emptyList() }
             }
 

@@ -41,6 +41,10 @@ class PlayerViewModel(
         )
     }
 
+    fun attachPhotoToLatestScore(photoPath: String) {
+        scoreRepository.attachPhotoToLatestScore(photoPath)
+    }
+
     // ── Factory ───────────────────────────────────────────────────────────────
 
     class Factory(

@@ -44,4 +44,51 @@ class StorageManager(private val context: Context) {
         val file = File(path)
         return file.exists() && file.isDirectory
     }
+
+    fun findExternalStoragePath(): String {
+        val sharedStorageCandidates = listOf(
+            "/sdcard/Download/karaoke",
+            "/storage/emulated/0/Download/karaoke",
+            "/storage/emulated/0/karaoke",
+            "/storage/emulated/0/KARAOKE"
+        )
+        sharedStorageCandidates.firstOrNull { isPathValid(it) }?.let { return it }
+
+        val storageDir = File("/storage")
+        storageDir.listFiles()
+            ?.filter { it.isDirectory && it.name != "emulated" && it.name != "self" }
+            ?.firstNotNullOfOrNull { findKaraokeDirectory(it) }
+            ?.let { return it.absolutePath }
+
+        val extStorage = Environment.getExternalStorageDirectory().absolutePath
+        val possiblePaths = listOf(
+            "$extStorage/Download/karaoke",
+            "$extStorage/Download/KARAOKE",
+            "$extStorage/karaoke",
+            "$extStorage/KARAOKE",
+            "$extStorage/Download/MUSICAS",
+            "$extStorage/MUSICAS",
+            "$extStorage/musicas",
+            "$extStorage/Music"
+        )
+
+        possiblePaths.firstOrNull { isPathValid(it) }?.let { return it }
+
+        return storageDir.listFiles()
+            ?.filter { it.isDirectory && it.name != "emulated" && it.name != "self" }
+            ?.firstOrNull { it.isDirectory }
+            ?.absolutePath
+            ?: "$extStorage/karaoke"
+    }
+
+    fun refreshRootPath(): String {
+        val detectedPath = findExternalStoragePath()
+        if (rootPath != detectedPath) rootPath = detectedPath
+        return detectedPath
+    }
+
+    private fun findKaraokeDirectory(parent: File): File? {
+        return parent.listFiles()
+            ?.firstOrNull { it.isDirectory && it.name.equals("karaoke", ignoreCase = true) }
+    }
 }

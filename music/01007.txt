@@ -1,8 +1,0 @@
-{
-  "01007": {
-    "arquivo": "01007.mp4",
-    "artista": "ivete sangalo",
-    "musica": "dengo de amor",
-    "inicio": "encontrar voce que coisa boa"
-  }
-}

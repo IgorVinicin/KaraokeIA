@@ -35,7 +35,8 @@ fun NavGraph(
     favoritesRepository: FavoritesRepository,
     historyRepository: HistoryRepository,
     queueRepository: QueueRepository,
-    scoreRepository: ScoreRepository
+        scoreRepository: ScoreRepository,
+        remoteUrl: String? = null
 ) {
     NavHost(
         navController    = navController,
@@ -77,6 +78,7 @@ fun NavGraph(
 
             PlayerScreen(
                 musicCode = musicCode,
+                    remoteUrl = remoteUrl,
                 viewModel = playerViewModel,
                 onBack    = { navController.popBackStack() },
                 onFinish  = { score, feedback ->
@@ -106,6 +108,8 @@ fun NavGraph(
                 score        = score,
                 feedback     = feedback,
                 nextMusic    = nextMusic,
+                allowPhoto   = score in 80..90 || score >= 98,
+                onPhotoCaptured = { path -> scoreRepository.attachPhotoToLatestScore(path) },
                 onPlayNext   = { codeToPlay ->
                     queueRepository.popNext()
                     navController.navigate(Screen.Player.createRoute(codeToPlay)) {

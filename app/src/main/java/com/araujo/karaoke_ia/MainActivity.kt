@@ -1,6 +1,11 @@
 package com.araujo.karaoke_ia
 
 import android.os.Bundle
+import android.os.Build
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +20,7 @@ import com.araujo.karaoke_ia.data.MusicRepositoryImpl
 import com.araujo.karaoke_ia.data.QueueRepository
 import com.araujo.karaoke_ia.data.ScoreRepository
 import com.araujo.karaoke_ia.data.StorageManager
+import com.araujo.karaoke_ia.remote.RemoteQueueServer
 import com.araujo.karaoke_ia.navigation.NavGraph
 import com.araujo.karaoke_ia.ui.theme.KaraokeIATheme
 import java.io.File
@@ -27,34 +33,14 @@ class MainActivity : ComponentActivity() {
     private lateinit var historyRepository: HistoryRepository
     private lateinit var queueRepository: QueueRepository
     private lateinit var scoreRepository: ScoreRepository
+    private lateinit var remoteQueueServer: RemoteQueueServer
 
-    private fun findExternalStoragePath(): String {
-        val storageDir = File("/storage")
-        val externalDrive = storageDir.listFiles()
-            ?.find { it.isDirectory && it.name != "emulated" && it.name != "self" }
-
-        if (externalDrive != null) {
-            listOf("MUSICAS", "musicas", "music", "Music", "KARAOKE", "Karaoke")
-                .map { File(externalDrive, it) }
-                .firstOrNull { it.exists() }
-                ?.let { return it.absolutePath }
-
-            return externalDrive.absolutePath
+    private val mediaReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            storageManager.refreshRootPath()
+            musicRepository.clearCache()
+            recreate()
         }
-
-        val extStorage = android.os.Environment.getExternalStorageDirectory().absolutePath
-        val possiblePaths = listOf(
-            "$extStorage/Download/MUSICAS",
-            "$extStorage/Download/musicas",
-            "$extStorage/MUSICAS",
-            "$extStorage/musicas",
-            "$extStorage/Music",
-            "/storage/emulated/0/Download/MUSICAS",
-            "/storage/emulated/0/MUSICAS"
-        )
-
-        return possiblePaths.firstOrNull { File(it).exists() }
-            ?: "$extStorage/MUSICAS"
     }
 
     @OptIn(ExperimentalTvMaterial3Api::class)
@@ -68,9 +54,23 @@ class MainActivity : ComponentActivity() {
         historyRepository   = HistoryRepository(this)
         queueRepository     = QueueRepository(this)
         scoreRepository     = ScoreRepository(this)
+        remoteQueueServer   = RemoteQueueServer(musicRepository, queueRepository)
+        remoteQueueServer.start()
 
         if (storageManager.rootPath == null) {
-            storageManager.rootPath = findExternalStoragePath()
+            storageManager.refreshRootPath()
+        }
+
+        val mediaFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_MEDIA_MOUNTED)
+            addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+            addAction(Intent.ACTION_MEDIA_REMOVED)
+            addDataScheme("file")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaReceiver, mediaFilter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(mediaReceiver, mediaFilter)
         }
 
         if (!storageManager.hasAllFilesPermission()) {
@@ -90,10 +90,21 @@ class MainActivity : ComponentActivity() {
                         favoritesRepository = favoritesRepository,
                         historyRepository   = historyRepository,
                         queueRepository     = queueRepository,
-                        scoreRepository     = scoreRepository
+                            scoreRepository     = scoreRepository,
+                            remoteUrl          = remoteQueueServer.localUrl()
                     )
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        remoteQueueServer.close()
+        try {
+            unregisterReceiver(mediaReceiver)
+        } catch (_: IllegalArgumentException) {
+            // Receiver may not have been registered when the activity is finishing after a failed init.
+        }
+        super.onDestroy()
     }
 }

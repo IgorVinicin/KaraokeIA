@@ -10,6 +10,7 @@ data class UserScoreEntry(
     val title: String,
     val artist: String,
     val score: Int,
+    val photoPath: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -42,6 +43,7 @@ class ScoreRepository(private val context: Context) {
                 put("title", entry.title)
                 put("artist", entry.artist)
                 put("score", entry.score)
+                put("photoPath", entry.photoPath)
                 put("timestamp", entry.timestamp)
             }
             jsonArray.put(obj)
@@ -65,6 +67,7 @@ class ScoreRepository(private val context: Context) {
                         title = obj.optString("title", "Sem título"),
                         artist = obj.optString("artist", "Desconhecido"),
                         score = obj.optInt("score", 0),
+                        photoPath = obj.optString("photoPath", "").ifBlank { null },
                         timestamp = obj.optLong("timestamp", 0L)
                     )
                 )
@@ -76,5 +79,25 @@ class ScoreRepository(private val context: Context) {
     /** Retorna as melhores pontuações do usuário (maior nota para a menor) */
     fun getBestScores(): List<UserScoreEntry> {
         return getAllScores().sortedByDescending { it.score }
+    }
+
+    fun attachPhotoToLatestScore(photoPath: String) {
+        val scores = getAllScores().toMutableList()
+        if (scores.isEmpty()) return
+        scores[0] = scores[0].copy(photoPath = photoPath)
+
+        val jsonArray = JSONArray()
+        scores.take(MAX_SCORES).forEach { entry ->
+            jsonArray.put(JSONObject().apply {
+                put("id", entry.id)
+                put("musicCode", entry.musicCode)
+                put("title", entry.title)
+                put("artist", entry.artist)
+                put("score", entry.score)
+                put("photoPath", entry.photoPath)
+                put("timestamp", entry.timestamp)
+            })
+        }
+        prefs.edit().putString(KEY_SCORES, jsonArray.toString()).apply()
     }
 }

@@ -13,6 +13,14 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
     @Volatile
     private var cachedMusics: List<MusicFile>? = null
 
+    @Volatile
+    private var cachedRootPath: String? = null
+
+    fun clearCache() {
+        cachedMusics = null
+        cachedRootPath = null
+    }
+
     /**
      * Busca uma música específica pelo código.
      * Suporta códigos digitados com ou sem zeros à esquerda (ex: 1007 e 01007).
@@ -27,16 +35,17 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
         }
 
         // 2. Busca direto no disco
-        val rootPath = storageManager.rootPath ?: return null
+        val rootPath = storageManager.refreshRootPath()
         val rootDir = File(rootPath)
         if (!rootDir.exists() || !rootDir.isDirectory) return null
+        val metadataDir = File(rootDir, "dados").takeIf { it.isDirectory } ?: rootDir
 
         val candidateCodes = listOf(cleanCode, cleanCode.padStart(5, '0'), cleanCode.trimStart('0')).distinct()
 
         for (candidate in candidateCodes) {
-            val mp4File = File(rootDir, "$candidate.mp4")
-            val txtFile = File(rootDir, "$candidate.txt")
-            if (mp4File.exists() && txtFile.exists()) {
+            val mp4File = findVideoFile(rootDir, candidate)
+            val txtFile = File(metadataDir, "$candidate.txt")
+            if (mp4File != null && txtFile.exists()) {
                 val parsed = parseMusicFile(txtFile, mp4File, candidate)
                 if (parsed != null) return parsed
             }
@@ -50,22 +59,23 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
      * Um arquivo é considerado válido quando existe o par [code].txt + [code].mp4.
      */
     override fun scanAllMusics(forceRefresh: Boolean): List<MusicFile> {
-        if (!forceRefresh && cachedMusics != null) {
+        val rootPath = storageManager.refreshRootPath()
+        if (!forceRefresh && cachedMusics != null && cachedRootPath == rootPath) {
             return cachedMusics!!
         }
 
-        val rootPath = storageManager.rootPath ?: return emptyList()
         val rootDir = File(rootPath)
         if (!rootDir.exists() || !rootDir.isDirectory) return emptyList()
 
         val result = mutableListOf<MusicFile>()
 
         try {
-            rootDir.listFiles()?.forEach { file ->
+            val metadataDir = File(rootDir, "dados").takeIf { it.isDirectory } ?: rootDir
+            metadataDir.listFiles()?.forEach { file ->
                 if (file.isFile && file.extension.equals("txt", ignoreCase = true)) {
                     val code = file.nameWithoutExtension
-                    val mp4File = File(rootDir, "$code.mp4")
-                    if (mp4File.exists()) {
+                    val mp4File = findVideoFile(rootDir, code)
+                    if (mp4File != null) {
                         parseMusicFile(file, mp4File, code)?.let { result.add(it) }
                     }
                 }
@@ -76,7 +86,14 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
 
         val sorted = result.sortedBy { it.title.lowercase() }
         cachedMusics = sorted
+        cachedRootPath = rootPath
         return sorted
+    }
+
+    private fun findVideoFile(rootDir: File, code: String): File? {
+        return listOf("mp4", "MP4", "mkv", "MKV", "avi", "AVI")
+            .map { File(rootDir, "$code.$it") }
+            .firstOrNull { it.isFile }
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

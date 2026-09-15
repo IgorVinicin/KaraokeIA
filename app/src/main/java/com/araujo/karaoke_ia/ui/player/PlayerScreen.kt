@@ -8,7 +8,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,11 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,14 +43,15 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.araujo.karaoke_ia.score.ScoreGenerator
+import com.araujo.karaoke_ia.remote.QrCodeGenerator
 import com.araujo.karaoke_ia.ui.theme.*
 import kotlinx.coroutines.delay
 import java.util.Locale
-import kotlin.math.sin
 
 @Composable
 fun PlayerScreen(
     musicCode: String,
+        remoteUrl: String? = null,
     onBack: () -> Unit,
     onFinish: (Int, String) -> Unit,
     viewModel: PlayerViewModel
@@ -108,9 +106,23 @@ fun PlayerScreen(
         return
     }
 
+    val currentMusic = musicFile ?: return
+    val mediaPath = currentMusic.videoPath?.takeIf { it.isNotBlank() }
+    if (mediaPath == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(DarkCharcoalBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = "Arquivo de música inválido ou ausente.", color = Color.White)
+        }
+        return
+    }
+
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(musicFile!!.videoPath!!)
+            val mediaItem = MediaItem.fromUri(mediaPath)
             setMediaItem(mediaItem)
             prepare()
             playWhenReady = true
@@ -118,12 +130,11 @@ fun PlayerScreen(
     }
 
     var isPlaying by remember { mutableStateOf(true) }
-    var currentPositionMs by remember { mutableLongStateOf(0L) }
-    var durationMs by remember { mutableLongStateOf(1L) }
     var showControls by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     val playPauseFocusRequester = remember { FocusRequester() }
+    val remoteQr = remember(remoteUrl) { remoteUrl?.let { QrCodeGenerator.createBitmap(it) } }
 
     BackHandler {
         exoPlayer.stop()
@@ -146,15 +157,6 @@ fun PlayerScreen(
         exoPlayer.addListener(listener)
         onDispose {
             exoPlayer.release()
-        }
-    }
-
-    // Atualização leve do tempo a cada 500ms (baixo consumo de CPU)
-    LaunchedEffect(exoPlayer) {
-        while (true) {
-            currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-            durationMs = exoPlayer.duration.coerceAtLeast(1L)
-            delay(500)
         }
     }
 
@@ -233,6 +235,24 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        if (remoteQr != null) {
+            Column(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                androidx.compose.foundation.Image(
+                    bitmap = remoteQr.asImageBitmap(),
+                    contentDescription = "Controle remoto",
+                    modifier = Modifier.size(120.dp).clip(RoundedCornerShape(8.dp))
+                )
+                Text(
+                    text = "Aponte o celular para adicionar músicas",
+                    color = Color.White,
+                    fontSize = 9.sp
+                )
+            }
+        }
+
         // Top Header
         Box(
             modifier = Modifier
@@ -249,21 +269,12 @@ fun PlayerScreen(
                     .padding(horizontal = 18.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "${musicFile!!.title} - ${musicFile!!.artist}",
+                    text = "${currentMusic.title} - ${currentMusic.artist}",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.9f)
                 )
             }
-        }
-
-        // HUD de Performance em Tempo Real (Otimizado com hardware transition)
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 48.dp)
-        ) {
-            RealTimePerformanceWidget()
         }
 
         // Controles OSD
@@ -296,13 +307,13 @@ fun PlayerScreen(
                 ) {
                     Column {
                         Text(
-                            text = musicFile!!.title,
+                            text = currentMusic.title,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = TextWhite
                         )
                         Text(
-                            text = "${musicFile!!.artist} • Código: ${musicFile!!.code}",
+                            text = "${currentMusic.artist} • Código: ${currentMusic.code}",
                             fontSize = 13.5.sp,
                             color = GoldPrimary
                         )
@@ -326,43 +337,6 @@ fun PlayerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = formatTime(currentPositionMs),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-
-                        val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(6.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(progress)
-                                    .clip(CircleShape)
-                                    .background(Brush.horizontalGradient(listOf(GoldAccent, GoldPrimary, GoldGlow)))
-                            )
-                        }
-
-                        Text(
-                            text = formatTime(durationMs),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextMuted
-                        )
-                    }
-
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -402,101 +376,6 @@ fun PlayerScreen(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  WIDGET DE PERFORMANCE OTIMIZADO (GPU Animation)
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun RealTimePerformanceWidget() {
-    val infiniteTransition = rememberInfiniteTransition(label = "pitch_anim")
-    val wavePhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 6.28f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phase"
-    )
-
-    Box(
-        modifier = Modifier
-            .width(180.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0x880D0E14))
-            .border(1.dp, GoldBadgeBorder, RoundedCornerShape(16.dp))
-            .padding(12.dp)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "Pontuação:",
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = GoldPrimary
-            )
-
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                val width = size.width
-                val height = size.height
-                val midY = height / 2
-
-                drawLine(
-                    color = Color(0x33FFFFFF),
-                    start = Offset(0f, midY),
-                    end = Offset(width, midY),
-                    strokeWidth = 1f
-                )
-
-                val path = Path()
-                val steps = 24
-                for (i in 0..steps) {
-                    val x = (i.toFloat() / steps) * width
-                    val angle = (i.toFloat() / steps) * 4f * Math.PI.toFloat() + wavePhase
-                    val y = midY + (height * 0.35f) * sin(angle)
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-
-                drawPath(
-                    path = path,
-                    color = GoldPrimary,
-                    style = Stroke(width = 2.5f)
-                )
-
-                drawCircle(
-                    color = GoldGlow,
-                    radius = 4f,
-                    center = Offset(width, midY + (height * 0.35f) * sin(4f * Math.PI.toFloat() + wavePhase))
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Pontuação: 91.5",
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextWhite
-                )
-
-                Text(
-                    text = "Precisão: 94%",
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ScoreGreen
-                )
             }
         }
     }

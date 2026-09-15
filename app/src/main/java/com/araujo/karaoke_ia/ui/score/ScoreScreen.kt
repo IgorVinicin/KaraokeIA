@@ -1,6 +1,10 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.araujo.karaoke_ia.ui.score
 
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +45,8 @@ import com.araujo.karaoke_ia.R
 import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.ui.theme.*
 import com.araujo.karaoke_ia.util.SoundEffectHelper
+import java.io.File
+import java.util.UUID
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -48,12 +55,44 @@ fun ScoreScreen(
     feedback: String,
     nextMusic: MusicFile? = null,
     onPlayNext: ((String) -> Unit)? = null,
+    allowPhoto: Boolean = false,
+    onPhotoCaptured: (String) -> Unit = {},
     onBackToHome: () -> Unit
 ) {
+    val context = LocalContext.current
+    val photoFile = remember(score) {
+        File(context.filesDir, "score_photos/${UUID.randomUUID()}.jpg").also {
+            it.parentFile?.mkdirs()
+        }
+    }
+    val photoUri = remember(photoFile) {
+        try {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", photoFile)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
+    val hasCamera = remember(context) {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
+    val photoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { captured ->
+        if (captured && photoFile.exists() && photoFile.length() > 0) {
+            onPhotoCaptured(photoFile.absolutePath)
+        }
+    }
     val buttonFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(score) {
         SoundEffectHelper.playCelebrationSound(score)
+        if (allowPhoto && hasCamera && photoUri != null) {
+            try {
+                photoLauncher.launch(photoUri)
+            } catch (_: Exception) {
+                // Camera app may not be available or the URI could not be resolved; do not crash the screen.
+            }
+        }
         try {
             buttonFocusRequester.requestFocus()
         } catch (_: Exception) {}

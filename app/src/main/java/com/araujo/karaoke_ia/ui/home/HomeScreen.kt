@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.araujo.karaoke_ia.ui.home
 
+import android.graphics.BitmapFactory
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +49,7 @@ import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.UserScoreEntry
 import com.araujo.karaoke_ia.ui.theme.*
 import kotlinx.coroutines.delay
+import java.io.File
 
 @Composable
 fun HomeScreen(
@@ -75,7 +78,6 @@ fun HomeScreen(
     val showQuickCodeHud    by viewModel.showQuickCodeHud
 
     val initialTabFocusRequester = remember { FocusRequester() }
-
     LaunchedEffect(Unit) {
         try { initialTabFocusRequester.requestFocus() } catch (_: Exception) {}
     }
@@ -620,6 +622,9 @@ private fun HomeDashboardView(
     onGoToQueue: () -> Unit,
     onGoToRanking: () -> Unit
 ) {
+    val dashboardMusics = remember(musics) { musics.take(12) }
+    val dashboardRecentMusics = remember(recentMusics) { recentMusics.take(12) }
+
     Row(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(22.dp)
@@ -638,7 +643,7 @@ private fun HomeDashboardView(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(bottom = 2.dp)
                 ) {
-                    items(musics, key = { it.code }) { music ->
+                    items(dashboardMusics, key = { it.code }) { music ->
                         SongCardItem(
                             music = music,
                             onClick = { onMusicClick(music) }
@@ -654,7 +659,7 @@ private fun HomeDashboardView(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(bottom = 2.dp)
                 ) {
-                    items(recentMusics, key = { "recent_${it.code}" }) { music ->
+                    items(dashboardRecentMusics, key = { "recent_${it.code}" }) { music ->
                         SongCardItem(
                             music = music,
                             onClick = { onMusicClick(music) }
@@ -695,6 +700,49 @@ private fun SectionHeader(title: String) {
         color = TextWhite,
         modifier = Modifier.padding(start = 2.dp)
     )
+}
+
+private const val MUSIC_PAGE_SIZE = 24
+
+@Composable
+private fun PaginationControls(
+    page: Int,
+    totalItems: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+    val pageCount = (totalItems + MUSIC_PAGE_SIZE - 1) / MUSIC_PAGE_SIZE
+    if (pageCount <= 1) return
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PaginationButton("Anterior", page > 0, onPrevious)
+        Text(
+            text = "Página ${page + 1} de $pageCount",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        PaginationButton("Próxima", page < pageCount - 1, onNext)
+    }
+}
+
+@Composable
+private fun PaginationButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (enabled) Color(0x44382C1A) else Color(0x22141722))
+            .border(1.dp, if (enabled) GoldBadgeBorder else Color(0x22141722), RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (enabled) GoldPrimary else TextSubtle, fontSize = 11.sp)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -957,6 +1005,16 @@ private fun MyScoresSummaryWidget(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
+                        if (index < 3 && entry.photoPath != null) {
+                            val decoded = remember(entry.photoPath) { BitmapFactory.decodeFile(entry.photoPath) }
+                            if (decoded != null) {
+                                Image(
+                                    bitmap = decoded.asImageBitmap(),
+                                    contentDescription = "Foto do cantor",
+                                    modifier = Modifier.size(34.dp).clip(CircleShape)
+                                )
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .size(26.dp)
@@ -1019,6 +1077,12 @@ private fun SongSearchView(
     onQueue: (String) -> Unit,
     onFavorite: (String) -> Unit
 ) {
+    var page by remember { mutableIntStateOf(0) }
+    LaunchedEffect(results) { page = 0 }
+    val pageResults = remember(results, page) {
+        results.drop(page * MUSIC_PAGE_SIZE).take(MUSIC_PAGE_SIZE)
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1086,7 +1150,7 @@ private fun SongSearchView(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.weight(1f)
         ) {
-            items(results, key = { it.code }) { music ->
+            items(pageResults, key = { it.code }) { music ->
                 SearchResultItem(
                     music = music,
                     isSelected = featuredMusic?.code == music.code,
@@ -1096,6 +1160,15 @@ private fun SongSearchView(
                 )
             }
         }
+
+        PaginationControls(
+            page = page,
+            totalItems = results.size,
+            onPrevious = { page = (page - 1).coerceAtLeast(0) },
+            onNext = {
+                page = (page + 1).coerceAtMost((results.size - 1) / MUSIC_PAGE_SIZE)
+            }
+        )
     }
 }
 
@@ -1653,6 +1726,17 @@ private fun PodiumCard(
                 color = if (isFirst) GoldPrimary else TextWhite
             )
 
+            if (entry.photoPath != null) {
+                val decoded = remember(entry.photoPath) { BitmapFactory.decodeFile(entry.photoPath) }
+                if (decoded != null) {
+                    Image(
+                        bitmap = decoded.asImageBitmap(),
+                        contentDescription = "Foto do cantor",
+                        modifier = Modifier.size(if (isFirst) 42.dp else 32.dp).clip(CircleShape)
+                    )
+                }
+            }
+
             Text(
                 text = "${entry.score} pts",
                 fontSize = if (isFirst) 15.sp else 12.5.sp,
@@ -1682,6 +1766,12 @@ private fun FavoritesScreenView(
     onQueue: (String) -> Unit,
     onToggleFavorite: (String) -> Unit
 ) {
+    var page by remember { mutableIntStateOf(0) }
+    LaunchedEffect(favorites) { page = 0 }
+    val pageFavorites = remember(favorites, page) {
+        favorites.drop(page * MUSIC_PAGE_SIZE).take(MUSIC_PAGE_SIZE)
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1718,7 +1808,7 @@ private fun FavoritesScreenView(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                items(favorites, key = { it.code }) { music ->
+                items(pageFavorites, key = { it.code }) { music ->
                     FavoriteGridCard(
                         music = music,
                         isInQueue = queueCodes.contains(music.code),
@@ -1728,6 +1818,14 @@ private fun FavoritesScreenView(
                     )
                 }
             }
+            PaginationControls(
+                page = page,
+                totalItems = favorites.size,
+                onPrevious = { page = (page - 1).coerceAtLeast(0) },
+                onNext = {
+                    page = (page + 1).coerceAtMost((favorites.size - 1) / MUSIC_PAGE_SIZE)
+                }
+            )
         }
     }
 }
@@ -1852,6 +1950,11 @@ private fun CatalogView(
     onArtistClear: () -> Unit,
     onCantar: (String) -> Unit
 ) {
+    var page by remember(selectedArtist) { mutableIntStateOf(0) }
+    val pageMusics = remember(musics, page) {
+        musics.drop(page * MUSIC_PAGE_SIZE).take(MUSIC_PAGE_SIZE)
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1883,13 +1986,21 @@ private fun CatalogView(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.weight(1f)
         ) {
-            items(musics, key = { it.code }) { music ->
+            items(pageMusics, key = { it.code }) { music ->
                 SongCardItem(
                     music = music,
                     onClick = { onCantar(music.code) }
                 )
             }
         }
+        PaginationControls(
+            page = page,
+            totalItems = musics.size,
+            onPrevious = { page = (page - 1).coerceAtLeast(0) },
+            onNext = {
+                page = (page + 1).coerceAtMost((musics.size - 1) / MUSIC_PAGE_SIZE)
+            }
+        )
     }
 }
 
