@@ -7,6 +7,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicRepository
@@ -36,6 +37,7 @@ fun NavGraph(
     historyRepository: HistoryRepository,
     queueRepository: QueueRepository,
         scoreRepository: ScoreRepository,
+        artworkRepository: ArtworkRepository,
         remoteUrl: String? = null
 ) {
     NavHost(
@@ -50,7 +52,8 @@ fun NavGraph(
                     favoritesRepo      = favoritesRepository,
                     historyRepo        = historyRepository,
                     queueRepo          = queueRepository,
-                    scoreRepo          = scoreRepository
+                    scoreRepo          = scoreRepository,
+                    artworkRepository = artworkRepository
                 )
             )
             HomeScreen(

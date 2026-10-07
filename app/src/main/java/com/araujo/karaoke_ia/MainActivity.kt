@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
+import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicRepositoryImpl
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var historyRepository: HistoryRepository
     private lateinit var queueRepository: QueueRepository
     private lateinit var scoreRepository: ScoreRepository
+    private lateinit var artworkRepository: ArtworkRepository
     private lateinit var remoteQueueServer: RemoteQueueServer
 
     private val mediaReceiver = object : BroadcastReceiver() {
@@ -54,6 +56,7 @@ class MainActivity : ComponentActivity() {
         historyRepository   = HistoryRepository(this)
         queueRepository     = QueueRepository(this)
         scoreRepository     = ScoreRepository(this)
+        artworkRepository   = ArtworkRepository(this)
         remoteQueueServer   = RemoteQueueServer(musicRepository, queueRepository)
         remoteQueueServer.start()
 
@@ -91,6 +94,7 @@ class MainActivity : ComponentActivity() {
                         historyRepository   = historyRepository,
                         queueRepository     = queueRepository,
                             scoreRepository     = scoreRepository,
+                            artworkRepository  = artworkRepository,
                             remoteUrl          = remoteQueueServer.localUrl()
                     )
                 }

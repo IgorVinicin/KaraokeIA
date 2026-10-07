@@ -17,7 +17,7 @@ fun KaraokeIATheme(
         tertiary     = BronzeBorder,        // Bronze
         background   = DarkCharcoalBg,      // Fundo ardósia escuro
         surface      = DarkCardSurface,     // Superfície de cards
-        onPrimary    = DarkCharcoalBg,      // Texto escuro sobre botão dourado
+        onPrimary    = Color.White,         // Texto branco sobre botões magenta
         onSecondary  = Color.White,
         onBackground = TextWhite,
         onSurface    = TextOffWhite

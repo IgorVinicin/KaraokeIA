@@ -222,7 +222,7 @@ fun ScoreScreen(
                     modifier = Modifier
                         .fillMaxWidth(0.5f)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x33261D12))
+                        .background(Color(0x33251520))
                         .border(1.5.dp, GoldBadgeBorder, RoundedCornerShape(16.dp))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
@@ -274,7 +274,7 @@ fun ScoreScreen(
                         .focusable(interactionSource = backInteraction)
                         .clip(RoundedCornerShape(16.dp))
                         .background(
-                            if (isBackFocused) Color(0xFF382C1A)
+                            if (isBackFocused) BronzeGradient1
                             else Color(0xFF202430)
                         )
                         .border(

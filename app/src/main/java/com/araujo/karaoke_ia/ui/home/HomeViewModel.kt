@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicFile
@@ -15,6 +16,8 @@ import com.araujo.karaoke_ia.data.UserScoreEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class ArtworkBatchProgress(val completed: Int, val total: Int)
 
 // ── Abas de Navegação Superior (Pill Tabs) ──────────────────────────────────
 enum class HomeTab {
@@ -36,7 +39,8 @@ class HomeViewModel(
     private val favoritesRepo: FavoritesRepository,
     private val historyRepo: HistoryRepository,
     private val queueRepo: QueueRepository,
-    private val scoreRepo: ScoreRepository
+    private val scoreRepo: ScoreRepository,
+    val artworkRepository: ArtworkRepository
 ) : ViewModel() {
 
     // ── Busca / código ────────────────────────────────────────────────────────
@@ -87,6 +91,9 @@ class HomeViewModel(
     /** Mensagem de erro ao carregar */
     private val _loadError = mutableStateOf<String?>(null)
     val loadError: State<String?> = _loadError
+
+    private val _artworkBatchProgress = mutableStateOf<ArtworkBatchProgress?>(null)
+    val artworkBatchProgress: State<ArtworkBatchProgress?> = _artworkBatchProgress
 
     // ── Filtro por cantor ─────────────────────────────────────────────────────
 
@@ -139,6 +146,23 @@ class HomeViewModel(
 
     fun loadScores() {
         _myBestScores.value = scoreRepo.getBestScores()
+    }
+
+    fun fetchMissingArtwork() {
+        if (_artworkBatchProgress.value != null) return
+        viewModelScope.launch {
+            val pending = _allMusics.value.filterNot(artworkRepository::hasLookupResult)
+            if (pending.isEmpty()) return@launch
+            _artworkBatchProgress.value = ArtworkBatchProgress(0, pending.size)
+            try {
+                pending.forEachIndexed { index, music ->
+                    artworkRepository.getArtworkFile(music)
+                    _artworkBatchProgress.value = ArtworkBatchProgress(index + 1, pending.size)
+                }
+            } finally {
+                _artworkBatchProgress.value = null
+            }
+        }
     }
 
     // ── Carregamento do HD ────────────────────────────────────────────────────
@@ -337,10 +361,11 @@ class HomeViewModel(
         private val favoritesRepo: FavoritesRepository,
         private val historyRepo: HistoryRepository,
         private val queueRepo: QueueRepository,
-        private val scoreRepo: ScoreRepository
+        private val scoreRepo: ScoreRepository,
+        private val artworkRepository: ArtworkRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            HomeViewModel(musicRepository, favoritesRepo, historyRepo, queueRepo, scoreRepo) as T
+            HomeViewModel(musicRepository, favoritesRepo, historyRepo, queueRepo, scoreRepo, artworkRepository) as T
     }
 }
