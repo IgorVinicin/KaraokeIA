@@ -2,31 +2,31 @@ package com.araujo.karaoke_ia.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Karaokê IA — Nova Identidade Visual Sofisticada (Lounge & Palco Dourado) ─
+// ── Karaokê IA — palco escuro com identidade neon magenta ────────────────────
 
 // ── Fundos e Superfícies Escuras (Slate / Charcoal) ─────────────────────────
-val DarkCharcoalBg    = Color(0xFF0A0B0E)   // Fundo geral profundo
-val DarkSlateSurface  = Color(0xFF12141C)   // Superfície base
-val DarkCardSurface   = Color(0xFF181B26)   // Cards principais
-val DarkCardElevated  = Color(0xFF222636)   // Cards em destaque / Hover
+val DarkCharcoalBg    = Color(0xFF08070B)   // Fundo geral profundo
+val DarkSlateSurface  = Color(0xFF111018)   // Superfície base
+val DarkCardSurface   = Color(0xFF17151E)   // Cards principais
+val DarkCardElevated  = Color(0xFF24212D)   // Cards em destaque / Hover
 val DarkCardBorder    = Color(0x26FFFFFF)   // Borda sutil de card (15% branco)
 val DarkPillBg        = Color(0x33252A3B)   // Fundo de botões em pílula inativos
 val DarkPillBorder    = Color(0x33FFFFFF)   // Borda de pílula inativa
 
-// ── Dourado / Âmbar / Champagne de Luxo ──────────────────────────────────────
-val GoldPrimary       = Color(0xFFF3C768)   // Dourado primário (foco, textos chave)
-val GoldAccent        = Color(0xFFE5A93C)   // Dourado quente (botões, badges)
-val GoldDark          = Color(0xFFC68A24)   // Dourado escuro para degradês
-val GoldGlow          = Color(0xFFFFE599)   // Brilho dourado intenso
-val GoldBadgeBg       = Color(0x2AF3C768)   // Fundo translúcido dourado
-val GoldBadgeBorder   = Color(0x80F3C768)   // Borda dourada translúcida
-val FocusGold         = Color(0xFFF3C768)   // Cor padrão do anel de foco da TV
+// ── Neon magenta da identidade visual ────────────────────────────────────────
+val GoldPrimary       = Color(0xFFFF2D96)   // Magenta primário (foco, textos chave)
+val GoldAccent        = Color(0xFFE91E78)   // Rosa intenso (botões, badges)
+val GoldDark          = Color(0xFFB5105C)   // Magenta escuro para degradês
+val GoldGlow          = Color(0xFFFF83BE)   // Brilho rosa intenso
+val GoldBadgeBg       = Color(0x2AFF2D96)   // Fundo translúcido magenta
+val GoldBadgeBorder   = Color(0x80FF2D96)   // Borda magenta translúcida
+val FocusGold         = Color(0xFFFF2D96)   // Cor padrão do anel de foco da TV
 
 // ── Bronze e Tons Quentes de Palco ──────────────────────────────────────────
-val BronzeSurface     = Color(0xFF282015)   // Superfície bronze para cards especiais
-val BronzeBorder      = Color(0xFF5A4525)   // Borda bronze
-val BronzeGradient1   = Color(0xFF3D2E17)   // Degradê bronze início
-val BronzeGradient2   = Color(0xFF1F160A)   // Degradê bronze fim
+val BronzeSurface     = Color(0xFF25131F)   // Superfície ameixa para cards especiais
+val BronzeBorder      = Color(0xFF60304D)   // Borda magenta escura
+val BronzeGradient1   = Color(0xFF40162F)   // Degradê ameixa início
+val BronzeGradient2   = Color(0xFF1D0D19)   // Degradê ameixa fim
 
 // ── Tipografia e Neutros ────────────────────────────────────────────────────
 val TextWhite         = Color(0xFFFFFFFF)   // Texto branco puro
@@ -37,7 +37,7 @@ val TextSubtle        = Color(0xFF6B7282)   // Texto terciário / legendas
 // ── Cores Funcionais ────────────────────────────────────────────────────────
 val HeartRed          = Color(0xFFEF4444)   // Coração de favoritos
 val ScoreGreen        = Color(0xFF34D399)   // Verde positivo
-val ScoreGold         = Color(0xFFFBBF24)   // Dourado excelente
+val ScoreGold         = GoldPrimary        // Destaque de pontuação magenta
 
 // ── Aliases de Retrocompatibilidade ─────────────────────────────────────────
 val DiscoBg           = DarkCharcoalBg
