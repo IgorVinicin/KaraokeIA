@@ -1,0 +1,48 @@
+﻿--------- beginning of main
+10-07 18:00:46.806  3334  3612 E MediaCodec: Codec reported err 0xffffffe0/DEAD_OBJECT, actionCode 0, while in state 6/STARTED
+10-07 18:00:47.064  3334  3612 E MediaCodec: releaseOutputBuffer() is valid only at Executing states; currently at Released state
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal: Playback error
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:   androidx.media3.exoplayer.ExoPlaybackException: MediaCodecVideoRenderer error, index=0, format=Format(1, null, null, video/avc, avc1.4D4028, -1, null, [1024, 768, 29.999958, ColorInfo(BT709, Limited range, SDR SMPTE 170M, false, 8bit Luma, 8bit Chroma)], [-1, -1]), format_supported=YES
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.handleMessage(ExoPlayerImplInternal.java:608)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.os.Handler.dispatchMessage(Handler.java:102)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.os.Looper.loopOnce(Looper.java:205)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.os.Looper.loop(Looper.java:294)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.os.HandlerThread.run(HandlerThread.java:67)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:   Caused by: androidx.media3.exoplayer.video.MediaCodecVideoDecoderException: Decoder failed: c2.goldfish.h264.decoder
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.video.MediaCodecVideoRenderer.createDecoderException(MediaCodecVideoRenderer.java:1978)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.render(MediaCodecRenderer.java:848)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.video.MediaCodecVideoRenderer.render(MediaCodecVideoRenderer.java:974)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.doSomeWork(ExoPlayerImplInternal.java:1079)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.handleMessage(ExoPlayerImplInternal.java:529)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       ... 4 more
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:   Caused by: java.lang.IllegalStateException: releaseOutputBuffer() is valid only at Executing states; currently at Released state
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:   
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.media.MediaCodec.releaseOutputBuffer(Native Method)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.media.MediaCodec.releaseOutputBufferInternal(MediaCodec.java:3857)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at android.media.MediaCodec.releaseOutputBuffer(MediaCodec.java:3831)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.AsynchronousMediaCodecAdapter.releaseOutputBuffer(AsynchronousMediaCodecAdapter.java:189)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.video.MediaCodecVideoRenderer.renderOutputBufferV21(MediaCodecVideoRenderer.java:1722)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.video.MediaCodecVideoRenderer.processOutputBuffer(MediaCodecVideoRenderer.java:1395)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.drainOutputBuffer(MediaCodecRenderer.java:1998)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.render(MediaCodecRenderer.java:827)
+10-07 18:00:47.285  3334  3607 E ExoPlayerImplInternal:       ... 7 more
+10-07 18:00:47.303  3334  3612 E MediaCodec: flush() is valid only at Executing states; currently at Released state
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal: Disable failed.
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:   java.lang.IllegalStateException: flush() is valid only at Executing states; currently at Released state
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:   
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at android.media.MediaCodec.native_flush(Native Method)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at android.media.MediaCodec.flush(MediaCodec.java:2504)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.AsynchronousMediaCodecAdapter.flush(AsynchronousMediaCodecAdapter.java:230)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.flushCodec(MediaCodecRenderer.java:912)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.flushOrReleaseCodec(MediaCodecRenderer.java:905)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.onDisabled(MediaCodecRenderer.java:744)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.video.MediaCodecVideoRenderer.onDisabled(MediaCodecVideoRenderer.java:743)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.BaseRenderer.disable(BaseRenderer.java:219)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.disableRenderer(ExoPlayerImplInternal.java:1764)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.resetInternal(ExoPlayerImplInternal.java:1486)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.stopInternal(ExoPlayerImplInternal.java:1446)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at androidx.media3.exoplayer.ExoPlayerImplInternal.handleMessage(ExoPlayerImplInternal.java:651)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at android.os.Handler.dispatchMessage(Handler.java:102)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at android.os.Looper.loopOnce(Looper.java:205)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at android.os.Looper.loop(Looper.java:294)
+10-07 18:00:47.407  3334  3607 E ExoPlayerImplInternal:       at android.os.HandlerThread.run(HandlerThread.java:67)

@@ -1,0 +1,6 @@
+ro.hardware=ranchu
+MediaCodecList.ALL_CODECS on current API34 TV AVD:
+c2.goldfish.h264.decoder software=false hardware=true supports1024x768=true
+c2.android.avc.decoder software=true hardware=false supports1024x768=true
+OMX.google.h264.decoder software=true hardware=false supports1024x768=true
+Queried via CodecProbe.java compiled locally to dex and app_process; no Gradle build, restart or UI input.

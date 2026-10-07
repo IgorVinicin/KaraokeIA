@@ -1,0 +1,211 @@
+Runtime TV 2026-10-07T14:33:48.8758360-03:00 - novo boot, logcat limpo antes do lançamento
+3001
+Name:	aujo.karaoke_ia
+Umask:	0077
+State:	S (sleeping)
+Tgid:	3001
+Ngid:	0
+Pid:	3001
+PPid:	321
+TracerPid:	0
+Uid:	10122	10122	10122	10122
+Gid:	10122	10122	10122	10122
+FDSize:	256
+Groups:	1077 3003 9997 20122 50122 
+VmPeak:	 1464316 kB
+VmSize:	 1442776 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	  198652 kB
+VmRSS:	  136332 kB
+RssAnon:	   87080 kB
+RssFile:	   47128 kB
+RssShmem:	    2124 kB
+VmData:	  633836 kB
+VmStk:	    8192 kB
+VmExe:	       8 kB
+VmLib:	  149044 kB
+VmPTE:	    1112 kB
+VmSwap:	   78180 kB
+CoreDumping:	0
+THP_enabled:	1
+Threads:	39
+SigQ:	0/3842
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000080001204
+SigIgn:	0000000000000001
+SigCgt:	0000006e400084f8
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	0000000000000000
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	2
+Seccomp_filters:	1
+Speculation_Store_Bypass:	vulnerable
+SpeculationIndirectBranch:	always enabled
+Cpus_allowed:	3
+Cpus_allowed_list:	0-1
+Mems_allowed:	1
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	2533
+nonvoluntary_ctxt_switches:	12120
+Applications Memory Usage (in Kilobytes):
+Uptime: 229228 Realtime: 229228
+
+** MEMINFO in pid 3001 [com.araujo.karaoke_ia] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    47025    46884      136     2612    47360    68008    53351     4994
+  Dalvik Heap     8662     8588       48      294     9060    19775     9888     9887
+ Dalvik Other     3631     2440      388       55     4632                           
+        Stack     1676     1672        4      248     1684                           
+       Ashmem       94       36        0        0      232                           
+    Other dev       10        0        4        0      248                           
+     .so mmap     8600      156     5812      125    23592                           
+    .jar mmap     6317        0     3232        0    22980                           
+    .apk mmap      322        0      280        0      648                           
+    .ttf mmap      592        0      408        0      776                           
+    .dex mmap       10        0        0        0      600                           
+    .oat mmap      132        0       60        0     1044                           
+    .art mmap     2992     1024     1540     2550    11136                           
+   Other mmap      300        8      140        0      904                           
+      Unknown    12757    12404      352    52142    12804                           
+        TOTAL   151146    73212    12404    58026   137700    87783    63239    14881
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    11152                          20196
+         Native Heap:    46884                          47360
+                Code:     9988                          51296
+               Stack:     1672                           1684
+            Graphics:        0                              0
+       Private Other:    15920
+              System:    65530
+             Unknown:                                   17164
+ 
+           TOTAL PSS:   151146            TOTAL RSS:   137700       TOTAL SWAP PSS:    58026
+ 
+ Objects
+               Views:        7         ViewRootImpl:        1
+         AppContexts:        5           Activities:        1
+              Assets:       17        AssetManagers:        0
+       Local Binders:       18        Proxy Binders:       36
+       Parcel memory:        6         Parcel count:       26
+    Death Recipients:        0             WebViews:        0
+ 
+ SQL
+         MEMORY_USED:        0
+  PAGECACHE_OVERFLOW:        0          MALLOC_SIZE:        0
+ 
+
+Second snapshot 2026-10-07T14:35:40.9625832-03:00
+3001
+Name:	aujo.karaoke_ia
+Umask:	0077
+State:	S (sleeping)
+Tgid:	3001
+Ngid:	0
+Pid:	3001
+PPid:	321
+TracerPid:	0
+Uid:	10122	10122	10122	10122
+Gid:	10122	10122	10122	10122
+FDSize:	512
+Groups:	1077 3003 9997 20122 50122 
+VmPeak:	 1577840 kB
+VmSize:	 1548716 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	  198652 kB
+VmRSS:	  121536 kB
+RssAnon:	   68808 kB
+RssFile:	   48032 kB
+RssShmem:	    4696 kB
+VmData:	  672260 kB
+VmStk:	    8192 kB
+VmExe:	       8 kB
+VmLib:	  149044 kB
+VmPTE:	    1360 kB
+VmSwap:	  102240 kB
+CoreDumping:	0
+THP_enabled:	1
+Threads:	57
+SigQ:	0/3842
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000080001204
+SigIgn:	0000000000000001
+SigCgt:	0000006e400084f8
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	0000000000000000
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	2
+Seccomp_filters:	1
+Speculation_Store_Bypass:	vulnerable
+SpeculationIndirectBranch:	always enabled
+Cpus_allowed:	3
+Cpus_allowed_list:	0-1
+Mems_allowed:	1
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	3346
+nonvoluntary_ctxt_switches:	15519
+Applications Memory Usage (in Kilobytes):
+Uptime: 340781 Realtime: 340781
+
+** MEMINFO in pid 3001 [com.araujo.karaoke_ia] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    14807    14476      324    20989    15080    62356    44170     9190
+  Dalvik Heap    17519    17292      188     1525    17904    37235    18634    18601
+ Dalvik Other     4978     3524       76       75     6524                           
+        Stack     1524     1516        8      656     1532                           
+       Ashmem      687       20        0        0     1472                           
+    Other dev       18        0       16        0      264                           
+     .so mmap    12371      180     9144      133    26680                           
+    .jar mmap     7631        0     4708        0    21168                           
+    .apk mmap      471        0      436        0      608                           
+    .ttf mmap      524        0      524        0      524                           
+    .dex mmap       14        0        4        0      596                           
+    .oat mmap      340        0      240        0     1192                           
+    .art mmap     3137     1072     1668     2510    10884                           
+   Other mmap       16        8        0        0      388                           
+      Unknown    11364     5600     5764    53542    11388                           
+        TOTAL   154831    43688    23100    79430   116204    99591    62804    27791
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    20032                          28788
+         Native Heap:    14476                          15080
+                Code:    15328                          53620
+               Stack:     1516                           1532
+            Graphics:        0                              0
+       Private Other:    15436
+              System:    88043
+             Unknown:                                   17184
+ 
+           TOTAL PSS:   154831            TOTAL RSS:   116204       TOTAL SWAP PSS:    79430
+ 
+ Objects
+               Views:       47         ViewRootImpl:        1
+         AppContexts:        5           Activities:        1
+              Assets:       17        AssetManagers:        0
+       Local Binders:       27        Proxy Binders:       42
+       Parcel memory:       12         Parcel count:       50
+    Death Recipients:        0             WebViews:        0
+ 
+ SQL
+         MEMORY_USED:        0
+  PAGECACHE_OVERFLOW:        0          MALLOC_SIZE:        0
+ 
+
+Assessment: both samples used the same app PID 3001. App PSS ~148-151 MiB. Threads 39 before playback, 57 during playback. No FATAL EXCEPTION, ANR, OOM, native fatal signal or media decoder failure in this cleared-log session. Startup rendered frames lasting 6-8 seconds and skipped frames; guest swap PSS grew from 58,026 to 79,430 KiB. The host had <1 GiB free RAM and the TV emulator used software GPU. This run verifies process stability, not smooth playback on a physical TV box.

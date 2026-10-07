@@ -4,6 +4,12 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.MusicRepository
@@ -20,14 +26,26 @@ class PlayerViewModel(
 
     private val _error = mutableStateOf<String?>(null)
     val error: State<String?> = _error
+    private var loadJob: Job? = null
 
     fun loadMusic(code: String) {
-        val file = repository.findMusicByCode(code)
-        if (file != null) {
-            _musicFile.value = file
-            historyRepository.addToHistory(code)
-        } else {
-            _error.value = "Música $code não encontrada no HD.\nVerifique se o HD está conectado."
+        loadJob?.cancel()
+        _error.value = null
+        _musicFile.value = null
+        loadJob = viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) { repository.findMusicByCode(code) }
+                if (file != null) {
+                    _musicFile.value = file
+                    historyRepository.addToHistory(file.code)
+                } else {
+                    _error.value = "Música $code não encontrada no HD.\nVerifique se o HD está conectado."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _error.value = "Não foi possível ler a música. Verifique o HD e a permissão de armazenamento."
+            }
         }
     }
 
@@ -39,10 +57,6 @@ class PlayerViewModel(
             artist = currentMusic.artist,
             score = score
         )
-    }
-
-    fun attachPhotoToLatestScore(photoPath: String) {
-        scoreRepository.attachPhotoToLatestScore(photoPath)
     }
 
     // ── Factory ───────────────────────────────────────────────────────────────

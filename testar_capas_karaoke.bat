@@ -10,6 +10,10 @@ set "AVD=Television_1080p"
 set "EMULATOR_RAM=1536"
 set "EMULATOR_CORES=2"
 set "EMULATOR_RESOLUTION=1280x720"
+if not defined EMULATOR_GPU set "EMULATOR_GPU=swiftshader_indirect"
+set "EMULATOR_LOG=%ROOT%emulador-tv.log"
+set "APP_LOG=%ROOT%karaoke-logcat.txt"
+set /a BOOT_WAIT=0
 
 rem KARAOKE_SOURCE pode ser definido antes de executar para usar outro caminho.
 if defined KARAOKE_SOURCE (
@@ -91,7 +95,8 @@ if not exist "%APK%" (
 if errorlevel 1 (
     echo [2/5] Iniciando o emulador Android TV no PC...
     echo Configuracao leve: %EMULATOR_CORES% nucleos, %EMULATOR_RAM% MB RAM, %EMULATOR_RESOLUTION%.
-    start "" "%EMULATOR%" -avd %AVD% -cores %EMULATOR_CORES% -memory %EMULATOR_RAM% -skin %EMULATOR_RESOLUTION% -gpu host -no-audio -no-boot-anim
+    echo Log do emulador: %EMULATOR_LOG%
+    start "Karaoke - Emulador" /b "%EMULATOR%" -avd %AVD% -cores %EMULATOR_CORES% -memory %EMULATOR_RAM% -skin %EMULATOR_RESOLUTION% -gpu %EMULATOR_GPU% -no-audio -no-snapshot >"%EMULATOR_LOG%" 2>&1
 ) else (
     echo [2/5] Emulador Android TV ja esta aberto no PC.
     "%ADB%" devices
@@ -112,12 +117,14 @@ timeout /t 2 /nobreak >nul
 goto waitdevice
 
 :waitboot
+echo Aguardando boot do Android TV... tentativa !BOOT_WAIT!/90
 set "BOOT_STATUS="
 for /f "tokens=*" %%a in ('"%ADB%" -e shell getprop sys.boot_completed 2^>nul') do set "BOOT_STATUS=%%a"
 if "!BOOT_STATUS!"=="1" goto bootcomplete
 set /a BOOT_WAIT+=1
 if !BOOT_WAIT! GEQ 90 (
     echo [ERRO] O Android TV conectou, mas nao terminou de iniciar em 3 minutos.
+    echo Consulte %EMULATOR_LOG%
     goto error
 )
 timeout /t 2 /nobreak >nul
@@ -142,13 +149,26 @@ if errorlevel 1 (
 )
 
 "%ADB%" -e shell am force-stop %PACKAGE%
-"%ADB%" -e shell am start -n %PACKAGE%/.MainActivity
+"%ADB%" -e logcat -b all -d -v threadtime >"%APP_LOG%" 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\iniciar-controle-qr.ps1" -Adb "%ADB%"
 if errorlevel 1 (
-    echo [ERRO] Falha ao abrir o Karaoke IA.
+    echo [ERRO] Falha ao iniciar o controle pelo QR Code. Confira controle-qr-error.log.
+    echo Verifique Node.js, conexao de rede e se o aplicativo esta aberto no emulador.
     goto error
 )
 
-echo [5/5] Aplicativo aberto.
+echo [5/5] Verificando se o aplicativo continua aberto...
+timeout /t 10 /nobreak >nul
+"%ADB%" -e logcat -b all -d -v threadtime >>"%APP_LOG%" 2>&1
+set "APP_PID="
+for /f "tokens=*" %%P in ('"%ADB%" -e shell pidof %PACKAGE% 2^>nul') do set "APP_PID=%%P"
+if not defined APP_PID (
+    echo [ERRO] O aplicativo nao permaneceu em execucao.
+    echo Log para diagnostico: %APP_LOG%
+    goto error
+)
+echo Aplicativo em execucao. PID: !APP_PID!
+echo Log para diagnostico: %APP_LOG%
 echo.
 echo TESTE:
 echo   - Catalogo: teste paginacao e pesquisa de musicas.

@@ -1,0 +1,17 @@
+{
+  "queue": [
+    "01079",
+    "01077"
+  ],
+  "artwork": [
+    {
+      "width": 128,
+      "height": 128
+    },
+    {
+      "width": 128,
+      "height": 128
+    }
+  ],
+  "overflow": false
+}

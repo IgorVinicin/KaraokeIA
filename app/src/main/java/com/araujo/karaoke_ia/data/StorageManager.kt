@@ -1,12 +1,17 @@
 package com.araujo.karaoke_ia.data
 
 import android.content.Context
+import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
 import java.io.File
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class StorageManager(private val context: Context) {
 
@@ -24,19 +29,29 @@ class StorageManager(private val context: Context) {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
         } else {
-            // Para versões anteriores, as permissões de READ_EXTERNAL_STORAGE são suficientes.
-            // Mas seguiremos o fluxo de requisição na UI se necessário.
-            true
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
         }
     }
 
     fun requestAllFilesPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                data = Uri.parse("package:${context.packageName}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val settingsIntents = listOf(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                },
+                Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+            )
+            for (intent in settingsIntents) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (runCatching { context.startActivity(intent) }.isSuccess) return
             }
-            context.startActivity(intent)
+        } else if (context is Activity) {
+            ActivityCompat.requestPermissions(
+                context,
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
+                STORAGE_PERMISSION_REQUEST
+            )
         }
     }
 
@@ -90,5 +105,9 @@ class StorageManager(private val context: Context) {
     private fun findKaraokeDirectory(parent: File): File? {
         return parent.listFiles()
             ?.firstOrNull { it.isDirectory && it.name.equals("karaoke", ignoreCase = true) }
+    }
+
+    companion object {
+        const val STORAGE_PERMISSION_REQUEST = 1001
     }
 }

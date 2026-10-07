@@ -1,0 +1,22 @@
+{
+  "apk": "C:\\Users\\admin.igor\\Documents\\GitHub\\KaraokeIA\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "bytes": 23087622,
+  "sha256": "0a08ce54b76754614a7f0788d1102e6ffac663daea5df9f0c5fa7dee1d83d1ae",
+  "build": "SUCCESSFUL",
+  "checks": [
+    "assembleDebug",
+    "lintDebug"
+  ],
+  "lint_errors": 0,
+  "lint_warnings": 48,
+  "daemon_java_version": 17,
+  "remaining_warning_categories": {
+    "GradleDependency": 33,
+    "AndroidGradlePluginVersion": 3,
+    "IconLauncherShape": 5,
+    "ModifierParameter": 3,
+    "UseTomlInstead": 2,
+    "SdCardPath": 1,
+    "IconLocation": 1
+  }
+}

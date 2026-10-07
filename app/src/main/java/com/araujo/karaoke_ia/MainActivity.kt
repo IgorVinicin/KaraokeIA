@@ -24,7 +24,6 @@ import com.araujo.karaoke_ia.data.StorageManager
 import com.araujo.karaoke_ia.remote.RemoteQueueServer
 import com.araujo.karaoke_ia.navigation.NavGraph
 import com.araujo.karaoke_ia.ui.theme.KaraokeIATheme
-import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -36,11 +35,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var scoreRepository: ScoreRepository
     private lateinit var artworkRepository: ArtworkRepository
     private lateinit var remoteQueueServer: RemoteQueueServer
+    private var hadStoragePermission = false
 
     private val mediaReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            storageManager.refreshRootPath()
-            musicRepository.clearCache()
             recreate()
         }
     }
@@ -57,12 +55,10 @@ class MainActivity : ComponentActivity() {
         queueRepository     = QueueRepository(this)
         scoreRepository     = ScoreRepository(this)
         artworkRepository   = ArtworkRepository(this)
-        remoteQueueServer   = RemoteQueueServer(musicRepository, queueRepository)
+        remoteQueueServer   = RemoteQueueServer(applicationContext, musicRepository, queueRepository, artworkRepository)
         remoteQueueServer.start()
 
-        if (storageManager.rootPath == null) {
-            storageManager.refreshRootPath()
-        }
+        hadStoragePermission = storageManager.hasAllFilesPermission()
 
         val mediaFilter = IntentFilter().apply {
             addAction(Intent.ACTION_MEDIA_MOUNTED)
@@ -76,7 +72,7 @@ class MainActivity : ComponentActivity() {
             registerReceiver(mediaReceiver, mediaFilter)
         }
 
-        if (!storageManager.hasAllFilesPermission()) {
+        if (!hadStoragePermission) {
             storageManager.requestAllFilesPermission()
         }
 
@@ -95,10 +91,26 @@ class MainActivity : ComponentActivity() {
                         queueRepository     = queueRepository,
                             scoreRepository     = scoreRepository,
                             artworkRepository  = artworkRepository,
-                            remoteUrl          = remoteQueueServer.localUrl()
+                            remoteUrl          = intent.getStringExtra("remote_url") ?: remoteQueueServer.localUrl()
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::storageManager.isInitialized && storageManager.hasAllFilesPermission() != hadStoragePermission) {
+            hadStoragePermission = storageManager.hasAllFilesPermission()
+            recreate()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == StorageManager.STORAGE_PERMISSION_REQUEST && storageManager.hasAllFilesPermission() && !hadStoragePermission) {
+            hadStoragePermission = true
+            recreate()
         }
     }
 

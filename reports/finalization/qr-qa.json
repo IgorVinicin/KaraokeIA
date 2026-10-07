@@ -1,0 +1,116 @@
+{
+  "base": "http://127.0.0.1:18765",
+  "initialQueue": [
+    "01079",
+    "01077"
+  ],
+  "viewports": [
+    {
+      "width": 320,
+      "fontsLoaded": true,
+      "bodyFont": true,
+      "headingFont": true,
+      "overflow": false,
+      "cards": 20,
+      "artwork": 3,
+      "dimensions": [
+        [
+          128,
+          127
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ]
+      ]
+    },
+    {
+      "width": 390,
+      "fontsLoaded": true,
+      "bodyFont": true,
+      "headingFont": true,
+      "overflow": false,
+      "cards": 20,
+      "artwork": 3,
+      "dimensions": [
+        [
+          128,
+          127
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ]
+      ]
+    },
+    {
+      "width": 768,
+      "fontsLoaded": true,
+      "bodyFont": true,
+      "headingFont": true,
+      "overflow": false,
+      "cards": 20,
+      "artwork": 3,
+      "dimensions": [
+        [
+          128,
+          127
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ]
+      ]
+    }
+  ],
+  "errors": [],
+  "fonts": [
+    {
+      "name": "body",
+      "status": 200,
+      "bytes": 164700,
+      "signature": "00010000"
+    },
+    {
+      "name": "heading",
+      "status": 200,
+      "bytes": 778272,
+      "signature": "00010000"
+    }
+  ],
+  "songs": 51,
+  "accentSearch": {
+    "query": "Ate quem sabe",
+    "matches": 1
+  },
+  "added": "01103",
+  "removed": true,
+  "cache": {
+    "code": "01079",
+    "status": 200,
+    "headers": {
+      "content-type": "image/jpeg",
+      "content-length": "7509",
+      "cache-control": "private, max-age=3600",
+      "connection": "close"
+    },
+    "sameBytes": true
+  },
+  "finalQueue": [
+    "01079",
+    "01077"
+  ],
+  "preservedInitial": true
+}

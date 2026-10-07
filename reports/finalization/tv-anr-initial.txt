@@ -1,0 +1,116 @@
+﻿--------- beginning of system
+10-07 17:19:02.148  1784  7262 E ActivityManager: Aborting stack trace dump (current firstPid=1975); deadline exceeded.
+10-07 17:19:02.302  1784  7262 E ActivityManager: ANR in com.araujo.karaoke_ia (com.araujo.karaoke_ia/.MainActivity)
+10-07 17:19:02.302  1784  7262 E ActivityManager: PID: 7188
+10-07 17:19:02.302  1784  7262 E ActivityManager: Reason: Input dispatching timed out (8db1196 com.araujo.karaoke_ia/com.araujo.karaoke_ia.MainActivity (server) is not responding. Waited 5115ms for FocusEvent(hasFocus=true))
+10-07 17:19:02.302  1784  7262 E ActivityManager: Parent: com.araujo.karaoke_ia/.MainActivity
+10-07 17:19:02.302  1784  7262 E ActivityManager: ErrorId: bf3c2825-539f-488c-b16b-fc407117860b
+10-07 17:19:02.302  1784  7262 E ActivityManager: Frozen: false
+10-07 17:19:02.302  1784  7262 E ActivityManager: Load: 5.73 / 4.05 / 3.59
+10-07 17:19:02.302  1784  7262 E ActivityManager: ----- Output from /proc/pressure/memory -----
+10-07 17:19:02.302  1784  7262 E ActivityManager: some avg10=2.34 avg60=3.27 avg300=1.52 total=52561406
+10-07 17:19:02.302  1784  7262 E ActivityManager: full avg10=0.54 avg60=0.76 avg300=0.29 total=9291732
+10-07 17:19:02.302  1784  7262 E ActivityManager: ----- End output from /proc/pressure/memory -----
+10-07 17:19:02.302  1784  7262 E ActivityManager: ----- Output from /proc/pressure/cpu -----
+10-07 17:19:02.302  1784  7262 E ActivityManager: some avg10=48.92 avg60=52.52 avg300=43.20 total=3987873779
+10-07 17:19:02.302  1784  7262 E ActivityManager: full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+10-07 17:19:02.302  1784  7262 E ActivityManager: ----- End output from /proc/pressure/cpu -----
+10-07 17:19:02.302  1784  7262 E ActivityManager: ----- Output from /proc/pressure/io -----
+10-07 17:19:02.302  1784  7262 E ActivityManager: some avg10=8.37 avg60=5.22 avg300=2.51 total=182955108
+10-07 17:19:02.302  1784  7262 E ActivityManager: full avg10=1.04 avg60=0.92 avg300=0.38 total=28876598
+10-07 17:19:02.302  1784  7262 E ActivityManager: ----- End output from /proc/pressure/io -----
+10-07 17:19:02.302  1784  7262 E ActivityManager: 
+10-07 17:19:02.302  1784  7262 E ActivityManager: CPU usage from 41ms to 23002ms later (2026-10-07 17:18:39.201 to 2026-10-07 17:19:02.162):
+10-07 17:19:02.302  1784  7262 E ActivityManager:   93% 7188/com.araujo.karaoke_ia: 38% user + 55% kernel / faults: 19323 minor 188 major
+10-07 17:19:02.302  1784  7262 E ActivityManager:   32% 348/android.hardware.graphics.composer3-service.ranchu: 1.2% user + 30% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   19% 1784/system_server: 6% user + 13% kernel / faults: 2446 minor 165 major
+10-07 17:19:02.302  1784  7262 E ActivityManager:   9.4% 379/surfaceflinger: 1.2% user + 8.2% kernel / faults: 2 minor
+10-07 17:19:02.302  1784  7262 E ActivityManager:   5.8% 1975/com.android.systemui: 2.6% user + 3.2% kernel / faults: 943 minor 30 major
+10-07 17:19:02.302  1784  7262 E ActivityManager:   4% 2274/com.google.android.inputmethod.latin: 2% user + 2% kernel / faults: 1219 minor 44 major
+10-07 17:19:02.302  1784  7262 E ActivityManager:   2.3% 2074/com.android.networkstack.process: 1.1% user + 1.2% kernel / faults: 735 minor 42 major
+10-07 17:19:02.302  1784  7262 E ActivityManager:   2.2% 6951/kworker/u4:0-flush-254:38: 0% user + 2.2% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   2% 2316/com.google.android.providers.media.module: 1.1% user + 0.9% kernel / faults: 24 minor
+10-07 17:19:02.302  1784  7262 E ActivityManager:   2% 14/rcu_preempt: 0% user + 2% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager: 96% TOTAL: 29% user + 62% kernel + 3.4% iowait + 1.4% softirq
+10-07 17:19:02.302  1784  7262 E ActivityManager: CPU usage from 369ms to 1265ms later (2026-10-07 17:18:39.528 to 2026-10-07 17:18:40.424):
+10-07 17:19:02.302  1784  7262 E ActivityManager:   147% 7188/com.araujo.karaoke_ia: 0% user + 147% kernel / faults: 3888 minor
+10-07 17:19:02.302  1784  7262 E ActivityManager:     80% 7222/RenderThread: 2.5% user + 77% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:     67% 7242/pool-2-thread-3: 0% user + 67% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   65% 1784/system_server: 16% user + 48% kernel / faults: 290 minor 2 major
+10-07 17:19:02.302  1784  7262 E ActivityManager:     66% 7263/AnrAuxiliaryTas: 15% user + 50% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   2.2% 14/rcu_preempt: 0% user + 2.2% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   2.4% 348/android.hardware.graphics.composer3-service.ranchu: 0% user + 2.4% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:     2.4% 436/binder:348_2: 0% user + 2.4% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   1.1% 133/lmkd: 0% user + 1.1% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager:   1.5% 2333/com.google.android.katniss:interactor: 0% user + 1.5% kernel
+10-07 17:19:02.302  1784  7262 E ActivityManager: 99% TOTAL: 12% user + 86% kernel + 0.6% softirq
+10-07 17:19:35.575  1784  7295 E ActivityManager: Aborting stack trace dump (current firstPid=2274); deadline exceeded.
+10-07 17:19:35.788  1784  7295 E ActivityManager: ANR in com.google.android.tvlauncher (com.google.android.tvlauncher/.MainActivity)
+10-07 17:19:35.788  1784  7295 E ActivityManager: PID: 6969
+10-07 17:19:35.788  1784  7295 E ActivityManager: Reason: Input dispatching timed out (9a7cf31 com.google.android.tvlauncher/com.google.android.tvlauncher.MainActivity (server) is not responding. Waited 5030ms for FocusEvent(hasFocus=true))
+10-07 17:19:35.788  1784  7295 E ActivityManager: Parent: com.google.android.tvlauncher/.MainActivity
+10-07 17:19:35.788  1784  7295 E ActivityManager: ErrorId: 8735f3e4-3203-4c48-aece-c169861b551c
+10-07 17:19:35.788  1784  7295 E ActivityManager: Frozen: false
+10-07 17:19:35.788  1784  7295 E ActivityManager: Load: 7.22 / 4.69 / 3.83
+10-07 17:19:35.788  1784  7295 E ActivityManager: ----- Output from /proc/pressure/memory -----
+10-07 17:19:35.788  1784  7295 E ActivityManager: some avg10=3.15 avg60=3.72 avg300=1.87 total=54199794
+10-07 17:19:35.788  1784  7295 E ActivityManager: full avg10=0.51 avg60=1.08 avg300=0.46 total=9997116
+10-07 17:19:35.788  1784  7295 E ActivityManager: ----- End output from /proc/pressure/memory -----
+10-07 17:19:35.788  1784  7295 E ActivityManager: ----- Output from /proc/pressure/cpu -----
+10-07 17:19:35.788  1784  7295 E ActivityManager: some avg10=71.92 avg60=61.23 avg300=46.37 total=4012582846
+10-07 17:19:35.788  1784  7295 E ActivityManager: full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+10-07 17:19:35.788  1784  7295 E ActivityManager: ----- End output from /proc/pressure/cpu -----
+10-07 17:19:35.788  1784  7295 E ActivityManager: ----- Output from /proc/pressure/io -----
+10-07 17:19:35.788  1784  7295 E ActivityManager: some avg10=21.39 avg60=10.59 avg300=4.13 total=188737657
+10-07 17:19:35.788  1784  7295 E ActivityManager: full avg10=4.40 avg60=2.00 avg300=0.71 total=30040762
+10-07 17:19:35.788  1784  7295 E ActivityManager: ----- End output from /proc/pressure/io -----
+10-07 17:19:35.788  1784  7295 E ActivityManager: 
+10-07 17:19:35.788  1784  7295 E ActivityManager: CPU usage from 380ms to 22369ms later (2026-10-07 17:19:13.588 to 2026-10-07 17:19:35.577):
+10-07 17:19:35.788  1784  7295 E ActivityManager:   64% 1784/system_server: 21% user + 43% kernel / faults: 3575 minor 44 major
+10-07 17:19:35.788  1784  7295 E ActivityManager:   27% 6969/com.google.android.tvlauncher: 9.9% user + 17% kernel / faults: 5086 minor 3 major
+10-07 17:19:35.788  1784  7295 E ActivityManager:   14% 348/android.hardware.graphics.composer3-service.ranchu: 0.5% user + 14% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   6.9% 14/rcu_preempt: 0% user + 6.9% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   6.2% 6951/kworker/u4:0-flush-254:38: 0% user + 6.2% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   3.6% 2274/com.google.android.inputmethod.latin: 1.7% user + 1.9% kernel / faults: 1362 minor 2 major
+10-07 17:19:35.788  1784  7295 E ActivityManager:   5.2% 6940/kworker/u4:3-events_unbound: 0% user + 5.2% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   4.8% 6942/kworker/0:0-events: 0% user + 4.8% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   4.8% 379/surfaceflinger: 0.4% user + 4.3% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   3.1% 2316/com.google.android.providers.media.module: 1% user + 2.1% kernel / faults: 142 minor 1 major
+10-07 17:19:35.788  1784  7295 E ActivityManager: 81% TOTAL: 20% user + 53% kernel + 6.2% iowait + 2% softirq
+10-07 17:19:35.788  1784  7295 E ActivityManager: CPU usage from 1325ms to 22352ms later (2026-10-07 17:19:14.533 to 2026-10-07 17:19:35.596) with 99% awake:
+10-07 17:19:35.788  1784  7295 E ActivityManager:   14% 348/android.hardware.graphics.composer3-service.ranchu: 0.5% user + 13% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     9.2% 428/binder:348_3: 0.4% user + 8.8% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     5.3% 436/binder:348_2: 0% user + 5.2% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   7.1% 14/rcu_preempt: 0% user + 7.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   5.4% 379/surfaceflinger: 0.5% user + 4.9% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     1.7% 379/surfaceflinger: 0.3% user + 1.4% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.9% 467/app: 0% user + 0.8% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.8% 403/RenderEngine: 0% user + 0.7% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.6% 466/TimerDispatch: 0% user + 0.6% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.5% 521/binder:379_5: 0.1% user + 0.4% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.3% 398/binder:379_1: 0% user + 0.3% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.1% 399/binder:379_2: 0% user + 0.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.1% 473/surfaceflinger: 0% user + 0.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.1% 494/binder:379_3: 0% user + 0.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0% 468/appSf: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0% 471/surfaceflinger: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   1.5% 179/jbd2/dm-38-8: 0% user + 1.5% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   1.4% 135/psimon: 0% user + 1.4% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0.8% 317/statsd: 0.1% user + 0.6% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.8% 389/statsd.writer: 0.1% user + 0.6% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0.5% 23/ksoftirqd/1: 0% user + 0.5% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0.3% 1/init: 0% user + 0.3% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.3% 1/init: 0% user + 0.3% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0.2% 133/lmkd: 0% user + 0.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.2% 133/lmkd: 0% user + 0.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0.1% 132/logd: 0% user + 0.1% kernel / faults: 4 minor
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0.1% 146/logd.writer: 0% user + 0.1% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 13/ksoftirqd/0: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 18/migration/0: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 31/kcompactd0: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 127/prng_seeder: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 185/tombstoned: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 332/android.hardware.health-service.example: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:   0% 392/adbd: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager:     0% 417/adbd: 0% user + 0% kernel
+10-07 17:19:35.788  1784  7295 E ActivityManager: 80% TOTAL: 20% user + 52% kernel + 6.4% iowait + 2.1% softirq

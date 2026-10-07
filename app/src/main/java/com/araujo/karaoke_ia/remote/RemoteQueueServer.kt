@@ -1,51 +1,109 @@
 package com.araujo.karaoke_ia.remote
 
+import android.content.Context
+import com.araujo.karaoke_ia.R
+
 import com.araujo.karaoke_ia.data.MusicRepository
+import com.araujo.karaoke_ia.data.ArtworkRepository
+import kotlinx.coroutines.runBlocking
 import com.araujo.karaoke_ia.data.QueueRepository
 import java.io.Closeable
 import java.net.ServerSocket
+import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.URLDecoder
-import java.net.URLEncoder
+import org.json.JSONObject
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.TimeUnit
 
 class RemoteQueueServer(
+    private val context: Context,
     private val musicRepository: MusicRepository,
     private val queueRepository: QueueRepository,
+    private val artworkRepository: ArtworkRepository,
     private val port: Int = 8765
 ) : Closeable {
-    private val executor = Executors.newCachedThreadPool()
+    private val executor = ThreadPoolExecutor(8, 8, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(64))
+    private val artworkRequests = java.util.concurrent.Semaphore(3)
+    private val lifecycleLock = Any()
+    private var starting = false
+    private var closed = false
+    private val clients = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<java.net.Socket, Boolean>())
     @Volatile private var serverSocket: ServerSocket? = null
 
     fun start() {
-        if (serverSocket != null) return
+        synchronized(lifecycleLock) {
+            if (closed || starting || serverSocket != null) return
+            starting = true
+        }
+        try {
         executor.execute {
             try {
-                ServerSocket(port).also { serverSocket = it }.use { server ->
+                val bound = synchronized(lifecycleLock) {
+                    if (closed) return@execute
+                    ServerSocket(port).also { serverSocket = it; starting = false }
+                }
+                bound.use { server ->
                     while (!server.isClosed) {
-                        executor.execute { handle(server.accept()) }
+                        val client = server.accept()
+                        val accepted = synchronized(lifecycleLock) {
+                            if (closed) false else { clients.add(client); true }
+                        }
+                        if (!accepted) { client.close(); break }
+                        try {
+                            executor.execute {
+                                try {
+                                    handle(client)
+                                } catch (_: Exception) {
+                                    client.close()
+                                } finally {
+                                    clients.remove(client)
+                                }
+                            }
+                        } catch (_: java.util.concurrent.RejectedExecutionException) {
+                            client.close()
+                            clients.remove(client)
+                        }
                     }
                 }
             } catch (_: Exception) {
-                serverSocket = null
+                synchronized(lifecycleLock) { serverSocket = null; starting = false }
             }
+        }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            synchronized(lifecycleLock) { starting = false }
         }
     }
 
     fun localUrl(): String? {
         val address = NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback && !it.isVirtual }
+            .sortedBy { if (it.name.startsWith("wlan") || it.name.startsWith("eth")) 0 else 1 }
             .flatMap { it.inetAddresses.toList() }
-            .firstOrNull { !it.isLoopbackAddress && it.hostAddress?.contains(':') == false }
+            .firstOrNull { it is Inet4Address && it.isSiteLocalAddress &&
+                it.hostAddress?.let { address -> address !in listOf("10.0.2.15", "10.0.2.16") } == true }
             ?.hostAddress
         return address?.let { "http://$it:$port" }
     }
 
     override fun close() {
-        serverSocket?.close()
-        serverSocket = null
+        synchronized(lifecycleLock) {
+            closed = true
+            serverSocket?.close()
+            serverSocket = null
+        }
+        clients.forEach { runCatching { it.close() } }
+        clients.clear()
         executor.shutdownNow()
     }
+
+    // Font files are packaged binary resources and can be opened as a resource stream.
+    // Lint's raw-only annotation excludes font IDs although this API reads their bytes.
+    @android.annotation.SuppressLint("ResourceType")
+    private fun openFontResource(@androidx.annotation.FontRes resource: Int): ByteArray =
+        context.resources.openRawResource(resource).use { it.readBytes() }
 
     private fun handle(socket: java.net.Socket) {
         socket.use { client ->
@@ -55,8 +113,37 @@ class RemoteQueueServer(
             while (reader.readLine()?.isNotEmpty() == true) { }
             val path = requestLine.split(" ").getOrNull(1) ?: "/"
             val route = path.substringBefore('?')
+            if (route == "/fonts/body" || route == "/fonts/heading") {
+                val resource = if (route == "/fonts/body") R.font.manrope else R.font.unbounded
+                val bytes = openFontResource(resource)
+                val header = "HTTP/1.1 200 OK\r\nContent-Type: font/ttf\r\nContent-Length: ${bytes.size}\r\nCache-Control: public, max-age=86400\r\nConnection: close\r\n\r\n"
+                client.getOutputStream().apply { write(header.toByteArray()); write(bytes); flush() }
+                return
+            }
             val query = parseQuery(path.substringAfter('?', ""))
             val code = query["code"]
+            if (route == "/api/artwork") {
+                val music = code?.let { musicRepository.findMusicByCode(it) }
+                if (music == null || !artworkRequests.tryAcquire()) {
+                    val status = if (music == null) "404 Not Found" else "503 Service Unavailable"
+                    client.getOutputStream().write("HTTP/1.1 $status\r\nContent-Length: 0\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n".toByteArray())
+                    return
+                }
+                try {
+                    val file = runBlocking { artworkRepository.getThumbnailFile(music) }
+                    val output = client.getOutputStream()
+                    if (file == null) {
+                        output.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n".toByteArray())
+                    } else {
+                        output.write("HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ${file.length()}\r\nCache-Control: private, max-age=3600\r\nConnection: close\r\n\r\n".toByteArray())
+                        file.inputStream().use { it.copyTo(output) }
+                    }
+                    output.flush()
+                } finally {
+                    artworkRequests.release()
+                }
+                return
+            }
             val body: String
             val contentType: String
 
@@ -70,8 +157,9 @@ class RemoteQueueServer(
                     contentType = "application/json; charset=utf-8"
                 }
                 "/api/add" -> {
-                    if (!code.isNullOrBlank() && musicRepository.findMusicByCode(code) != null) {
-                        queueRepository.addToQueue(code)
+                    val music = code?.let { musicRepository.findMusicByCode(it) }
+                    if (music != null) {
+                        queueRepository.addToQueue(music.code)
                     }
                     body = queueJson()
                     contentType = "application/json; charset=utf-8"
@@ -106,7 +194,7 @@ class RemoteQueueServer(
         }
 
     private fun songsJson(): String {
-        val songs = musicRepository.scanAllMusics().take(500)
+        val songs = musicRepository.scanAllMusics()
         return songs.joinToString(prefix = "[", postfix = "]") { music ->
             "{\"code\":\"${jsonEscape(music.code)}\",\"title\":\"${jsonEscape(music.title)}\",\"artist\":\"${jsonEscape(music.artist)}\"}"
         }
@@ -120,39 +208,8 @@ class RemoteQueueServer(
         }
     }
 
-    private fun renderPage(): String {
-        return """
-            <!doctype html><html lang="pt-BR"><head><meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>Karaoke IA - Controle</title><style>
-            *{box-sizing:border-box}body{margin:0;background:#101114;color:#f5f5f5;font:15px system-ui,sans-serif}main{max-width:720px;margin:auto;padding:18px}
-            header{position:sticky;top:0;background:#101114ee;padding-bottom:12px;z-index:2}h1{font-size:24px;margin:0 0 4px;color:#ff2d96}h2{font-size:17px;margin:20px 0 9px}
-            .muted{color:#a8a8ad;font-size:13px}.tools{display:flex;gap:8px;margin-top:14px}.tools input{flex:1;min-width:0;background:#202126;border:1px solid #45454c;border-radius:10px;padding:12px;color:#fff;font-size:15px}
-            button{border:0;border-radius:9px;padding:10px 13px;background:#ff2d96;color:#fff;font-weight:700;font-size:14px}button.danger{background:#39251d;color:#ffb7a2}button.small{padding:7px 10px;font-size:12px}
-            ul{list-style:none;padding:0;margin:0}.song,.queue{display:flex;align-items:center;gap:10px;background:#1b1c21;border:1px solid #2b2c32;border-radius:11px;padding:11px;margin:8px 0}.info{flex:1;min-width:0}.title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist,.code{color:#a8a8ad;font-size:12px}.queue{border-color:#6d2850}.queue .position{color:#ff2d96;font-weight:800;width:22px}.empty{color:#a8a8ad;padding:12px 0}.status{color:#8de0a8;font-size:13px;min-height:18px}
-            </style></head><body><main><header><h1>Karaoke IA</h1><div class="muted">Controle remoto local</div><div class="tools"><input id="search" placeholder="Buscar música ou artista"><button onclick="loadAll()">Atualizar</button></div></header>
-            <div id="status" class="status"></div><section><h2>Fila atual <button class="small danger" onclick="clearQueue()">Limpar fila</button></h2><ul id="queue"></ul></section>
-            <section><h2>Músicas</h2><ul id="songs"></ul></section></main><script>
-            let songs=[];const esc=s=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-            async function api(path){const r=await fetch(path,{cache:'no-store'});return r.json()}
-            function renderSongs(){const q=document.getElementById('search').value.toLowerCase();const list=songs.filter(x=>(x.title+' '+x.artist+' '+x.code).toLowerCase().includes(q));document.getElementById('songs').innerHTML=list.map(x=>`<li class="song"><div class="info"><div class="title">${'$'}{esc(x.title)}</div><div class="artist">${'$'}{esc(x.artist)} · ${'$'}{esc(x.code)}</div></div><button class="small" onclick="add('${'$'}{esc(x.code)}')">Adicionar</button></li>`).join('')||'<li class="empty">Nenhuma música encontrada.</li>'}
-            async function renderQueue(){const list=await api('/api/queue');document.getElementById('queue').innerHTML=list.map((x,i)=>`<li class="queue"><span class="position">${'$'}{i+1}</span><div class="info"><div class="title">${'$'}{esc(x.title)}</div><div class="artist">${'$'}{esc(x.artist)} · ${'$'}{esc(x.code)}</div></div><button class="small danger" onclick="remove('${'$'}{esc(x.code)}')">Remover</button></li>`).join('')||'<li class="empty">A fila está vazia.</li>'}
-            async function add(code){await api('/api/add?code='+encodeURIComponent(code));document.getElementById('status').textContent='Música adicionada à fila.';await renderQueue()}
-            async function remove(code){await api('/api/remove?code='+encodeURIComponent(code));await renderQueue()}
-            async function clearQueue(){if(confirm('Limpar toda a fila?')){await api('/api/clear');await renderQueue()}}
-            async function loadAll(){songs=await api('/api/songs');renderSongs();await renderQueue()}
-            document.getElementById('search').addEventListener('input',renderSongs);loadAll();setInterval(renderQueue,3000)
-            </script></body></html>
-        """.trimIndent()
-    }
-
-    private fun jsonEscape(value: String): String = value
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-
-    private fun escape(value: String): String = value
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\"", "&quot;")
+    private fun renderPage(): String = context.assets.open("remote-control.html")
+        .bufferedReader(Charsets.UTF_8).use { it.readText() }
+    // Android's JSON encoder also escapes tabs, carriage returns and control characters.
+    private fun jsonEscape(value: String): String = JSONObject.quote(value).drop(1).dropLast(1)
 }

@@ -1,6 +1,7 @@
 package com.araujo.karaoke_ia.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -83,6 +84,7 @@ fun NavGraph(
                 musicCode = musicCode,
                     remoteUrl = remoteUrl,
                 viewModel = playerViewModel,
+                artworkRepository = artworkRepository,
                 onBack    = { navController.popBackStack() },
                 onFinish  = { score, feedback ->
                     playerViewModel.recordScore(score)
@@ -103,6 +105,11 @@ fun NavGraph(
         ) { backStackEntry ->
             val score    = backStackEntry.arguments?.getInt("score")       ?: 0
             val feedback = backStackEntry.arguments?.getString("feedback") ?: ""
+            val scoreEntry = remember(backStackEntry) { scoreRepository.getAllScores().firstOrNull() }
+            val rankingPosition = remember(scoreEntry) {
+                scoreRepository.getBestScores().indexOfFirst { it.id == scoreEntry?.id }
+                    .takeIf { it >= 0 }?.plus(1)
+            }
 
             val nextCode = queueRepository.peekNext()
             val nextMusic = nextCode?.let { musicRepository.findMusicByCode(it) }
@@ -111,8 +118,11 @@ fun NavGraph(
                 score        = score,
                 feedback     = feedback,
                 nextMusic    = nextMusic,
-                allowPhoto   = score in 80..90 || score >= 98,
-                onPhotoCaptured = { path -> scoreRepository.attachPhotoToLatestScore(path) },
+                allowPhoto   = rankingPosition != null && rankingPosition <= 3,
+                rankingPosition = rankingPosition,
+                scoredMusic = scoreEntry?.let { musicRepository.findMusicByCode(it.musicCode) },
+                artworkRepository = artworkRepository,
+                onPhotoCaptured = { path -> scoreEntry?.let { scoreRepository.attachPhotoToScore(it.id, path) } },
                 onPlayNext   = { codeToPlay ->
                     queueRepository.popNext()
                     navController.navigate(Screen.Player.createRoute(codeToPlay)) {

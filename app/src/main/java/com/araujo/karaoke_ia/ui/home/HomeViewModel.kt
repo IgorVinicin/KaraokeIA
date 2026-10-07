@@ -94,6 +94,8 @@ class HomeViewModel(
 
     private val _artworkBatchProgress = mutableStateOf<ArtworkBatchProgress?>(null)
     val artworkBatchProgress: State<ArtworkBatchProgress?> = _artworkBatchProgress
+    private val _artworkRevision = mutableStateOf(0)
+    val artworkRevision: State<Int> = _artworkRevision
 
     // ── Filtro por cantor ─────────────────────────────────────────────────────
 
@@ -134,6 +136,17 @@ class HomeViewModel(
 
     private val _myBestScores = mutableStateOf<List<UserScoreEntry>>(emptyList())
     val myBestScores: State<List<UserScoreEntry>> = _myBestScores
+    private val queueSubscription = queueRepo.observeChanges {
+        viewModelScope.launch {
+            _queueCodes.value = queueRepo.getQueue()
+            refreshQueueMusics(_allMusics.value)
+        }
+    }
+
+    override fun onCleared() {
+        queueSubscription.close()
+        super.onCleared()
+    }
 
     // ── Init ──────────────────────────────────────────────────────────────────
 
@@ -157,6 +170,7 @@ class HomeViewModel(
             try {
                 pending.forEachIndexed { index, music ->
                     artworkRepository.getArtworkFile(music)
+                    _artworkRevision.value += 1
                     _artworkBatchProgress.value = ArtworkBatchProgress(index + 1, pending.size)
                 }
             } finally {

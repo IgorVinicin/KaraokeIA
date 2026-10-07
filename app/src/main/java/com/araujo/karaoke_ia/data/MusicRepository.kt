@@ -15,11 +15,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
 
     @Volatile
     private var cachedRootPath: String? = null
-
-    fun clearCache() {
-        cachedMusics = null
-        cachedRootPath = null
-    }
+    @Volatile private var cachedByCode: Map<String, MusicFile> = emptyMap()
 
     /**
      * Busca uma música específica pelo código.
@@ -30,7 +26,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
         if (cleanCode.isBlank()) return null
 
         // 1. Tenta encontrar no cache da memória primeiro
-        cachedMusics?.firstOrNull { it.code == cleanCode || it.code == cleanCode.padStart(5, '0') || it.code.trimStart('0') == cleanCode.trimStart('0') }?.let {
+        cachedByCode[cleanCode.trimStart('0').ifEmpty { "0" }]?.let {
             return it
         }
 
@@ -58,7 +54,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
      * Varre todo o diretório raiz do HD/USB e retorna todas as músicas encontradas.
      * Um arquivo é considerado válido quando existe o par [code].txt + [code].mp4.
      */
-    override fun scanAllMusics(forceRefresh: Boolean): List<MusicFile> {
+    @Synchronized override fun scanAllMusics(forceRefresh: Boolean): List<MusicFile> {
         val rootPath = storageManager.refreshRootPath()
         if (!forceRefresh && cachedMusics != null && cachedRootPath == rootPath) {
             return cachedMusics!!
@@ -71,11 +67,16 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
 
         try {
             val metadataDir = File(rootDir, "dados").takeIf { it.isDirectory } ?: rootDir
+            // Index existing videos once instead of probing six absent paths for each metadata file.
+            val videoFiles = rootDir.listFiles().orEmpty()
+                .filter { it.extension.lowercase() in setOf("mp4", "mkv", "avi") && it.isFile }
+                .associateBy { it.name }
             metadataDir.listFiles()?.forEach { file ->
-                if (file.isFile && file.extension.equals("txt", ignoreCase = true)) {
+                if (file.extension.equals("txt", ignoreCase = true)) {
                     val code = file.nameWithoutExtension
-                    val mp4File = findVideoFile(rootDir, code)
-                    if (mp4File != null) {
+                    val mp4File = listOf("mp4", "MP4", "mkv", "MKV", "avi", "AVI")
+                        .firstNotNullOfOrNull { videoFiles["$code.$it"] }
+                    if (mp4File != null && file.isFile) {
                         parseMusicFile(file, mp4File, code)?.let { result.add(it) }
                     }
                 }
@@ -85,6 +86,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
         }
 
         val sorted = result.sortedBy { it.title.lowercase() }
+        cachedByCode = sorted.associateBy { it.code.trimStart('0').ifEmpty { "0" } }
         cachedMusics = sorted
         cachedRootPath = rootPath
         return sorted
@@ -100,6 +102,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
 
     private fun parseMusicFile(txtFile: File, mp4File: File, code: String): MusicFile? {
         return try {
+            if (txtFile.length() > 1024 * 1024) return null
             // Remove BOM (Byte Order Mark) e espaços extras caso existam
             val jsonString = txtFile.readText(Charsets.UTF_8).replace("\uFEFF", "").trim()
             val jsonObject = JSONObject(jsonString)

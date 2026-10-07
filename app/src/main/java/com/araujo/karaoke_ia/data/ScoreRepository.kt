@@ -67,7 +67,7 @@ class ScoreRepository(private val context: Context) {
                         title = obj.optString("title", "Sem título"),
                         artist = obj.optString("artist", "Desconhecido"),
                         score = obj.optInt("score", 0),
-                        photoPath = obj.optString("photoPath", "").ifBlank { null },
+                        photoPath = if (obj.isNull("photoPath")) null else obj.optString("photoPath").ifBlank { null },
                         timestamp = obj.optLong("timestamp", 0L)
                     )
                 )
@@ -81,10 +81,11 @@ class ScoreRepository(private val context: Context) {
         return getAllScores().sortedByDescending { it.score }
     }
 
-    fun attachPhotoToLatestScore(photoPath: String) {
+    fun attachPhotoToScore(scoreId: String, photoPath: String) {
         val scores = getAllScores().toMutableList()
-        if (scores.isEmpty()) return
-        scores[0] = scores[0].copy(photoPath = photoPath)
+        val index = scores.indexOfFirst { it.id == scoreId }
+        if (index < 0) return
+        scores[index] = scores[index].copy(photoPath = photoPath)
 
         val jsonArray = JSONArray()
         scores.take(MAX_SCORES).forEach { entry ->

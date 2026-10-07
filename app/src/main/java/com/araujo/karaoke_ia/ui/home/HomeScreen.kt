@@ -3,6 +3,12 @@ package com.araujo.karaoke_ia.ui.home
 
 import android.graphics.BitmapFactory
 import androidx.compose.animation.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,15 +39,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,15 +72,41 @@ import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.UserScoreEntry
 import com.araujo.karaoke_ia.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.awaitCancellation
 import java.io.File
+import kotlin.math.PI
+import kotlin.math.sin
 
 private val LocalArtworkRepository = staticCompositionLocalOf<ArtworkRepository?> { null }
+private val LocalArtworkRevision = staticCompositionLocalOf { 0 }
+
+@Composable
+private fun Modifier.tvSearchFocusNavigation(): Modifier {
+    val focusManager = LocalFocusManager.current
+    return onPreviewKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown) false else when (event.key) {
+            Key.DirectionUp -> { focusManager.moveFocus(FocusDirection.Up); true }
+            Key.DirectionDown -> { focusManager.moveFocus(FocusDirection.Down); true }
+            else -> false
+        }
+    }
+}
 
 @Composable
 fun HomeScreen(
     onNavigateToPlayer: (String) -> Unit,
     viewModel: HomeViewModel
 ) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isTelevision = configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
+        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    if (!isTelevision) {
+        CompositionLocalProvider(LocalArtworkRepository provides viewModel.artworkRepository,
+            LocalArtworkRevision provides viewModel.artworkRevision.value) {
+            MobileHomeScreen(viewModel, onNavigateToPlayer)
+        }
+        return
+    }
     val searchQuery         by viewModel.searchQuery
     val selectedTab         by viewModel.selectedTab
     val isLoading           by viewModel.isLoading
@@ -82,14 +124,21 @@ fun HomeScreen(
     val selectedArtist      by viewModel.selectedArtist
     val artistMusics        by viewModel.artistMusics
     val artworkBatchProgress by viewModel.artworkBatchProgress
+    val artworkRevision by viewModel.artworkRevision
 
     val quickCode           by viewModel.quickCode
     val quickMatchedMusic   by viewModel.quickMatchedMusic
     val showQuickCodeHud    by viewModel.showQuickCodeHud
 
     val initialTabFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        try { initialTabFocusRequester.requestFocus() } catch (_: Exception) {}
+    val homeLifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(homeLifecycleOwner) {
+        homeLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // NavHost resumes this entry after its transition and player view disposal.
+            withFrameNanos { }
+            initialTabFocusRequester.requestFocus()
+            awaitCancellation()
+        }
     }
 
     LaunchedEffect(quickCode, showQuickCodeHud) {
@@ -110,7 +159,8 @@ fun HomeScreen(
         }
     }
 
-    CompositionLocalProvider(LocalArtworkRepository provides viewModel.artworkRepository) {
+    CompositionLocalProvider(LocalArtworkRepository provides viewModel.artworkRepository,
+        LocalArtworkRevision provides artworkRevision) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -119,13 +169,6 @@ fun HomeScreen(
                 drawRect(color = DarkCharcoalBg)
 
                 // Luz ambiente inspirada nos refletores do palco da referência.
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0x35F51B83), Color(0x142A54A8), Color.Transparent),
-                        center = Offset(size.width * 0.72f, size.height * 0.18f),
-                        radius = size.width * 0.52f
-                    )
-                )
 
                 // Vinheta inferior
                 drawRect(
@@ -182,11 +225,6 @@ fun HomeScreen(
                 .padding(horizontal = 32.dp, vertical = 18.dp)
         ) {
             // ── 1. Top Header ───────────────────────────────────────────────
-            HeroHeaderSection(
-                onGoHome = { viewModel.onTabSelected(HomeTab.INICIO) }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
 
             // ── 2. Barra de Navegação em Pílulas ─────────────────────────────
             PillNavigationBar(
@@ -208,6 +246,13 @@ fun HomeScreen(
             // ── 3. Visualização da Aba ───────────────────────────────────────
             Box(modifier = Modifier.weight(1f)) {
                 when {
+                    selectedTab == HomeTab.RANKING -> {
+                        MyScoresScreenView(
+                            myScores = myBestScores,
+                            onCantar = { code -> onNavigateToPlayer(code) }
+                        )
+                    }
+
                     isLoading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             androidx.compose.material3.CircularProgressIndicator(color = GoldPrimary)
@@ -224,16 +269,26 @@ fun HomeScreen(
                     selectedTab == HomeTab.INICIO -> {
                         HomeDashboardView(
                             musics = allMusics,
-                            recentMusics = if (historyMusics.isNotEmpty()) historyMusics else allMusics,
+                            recentMusics = historyMusics,
                             queueCount = queueCodes.size,
                             myBestScores = myBestScores,
                             onMusicClick = { onNavigateToPlayer(it.code) },
                             onCantarAgora = {
-                                val codeToPlay = queueCodes.firstOrNull() ?: allMusics.firstOrNull()?.code ?: "01007"
+                                val codeToPlay = queueCodes.firstOrNull() ?: allMusics.firstOrNull()?.code ?: return@HomeDashboardView
                                 onNavigateToPlayer(codeToPlay)
                             },
                             onGoToQueue = { viewModel.onTabSelected(HomeTab.FILA) },
-                            onGoToRanking = { viewModel.onTabSelected(HomeTab.RANKING) }
+                            onGoToRanking = { viewModel.onTabSelected(HomeTab.RANKING) },
+                            searchQuery = searchQuery,
+                            onSearchQueryChange = {
+                                viewModel.onSearchQueryChange(it)
+                                viewModel.onTabSelected(HomeTab.PESQUISAR)
+                            },
+                            onViewAll = { viewModel.onTabSelected(HomeTab.MUSICAS) },
+                            onArtistClick = {
+                                viewModel.onTabSelected(HomeTab.MUSICAS)
+                                viewModel.onArtistSelected(it)
+                            }
                         )
                     }
 
@@ -275,13 +330,6 @@ fun HomeScreen(
                         )
                     }
 
-                    selectedTab == HomeTab.RANKING -> {
-                        MyScoresScreenView(
-                            myScores = myBestScores,
-                            onCantar = { code -> onNavigateToPlayer(code) }
-                        )
-                    }
-
                     selectedTab == HomeTab.FAVORITOS -> {
                         FavoritesScreenView(
                             favorites = favoriteMusics,
@@ -315,72 +363,6 @@ fun HomeScreen(
 //  1. HERO HEADER SECTION
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun HeroHeaderSection(
-    onGoHome: () -> Unit
-) {
-    val homeInteraction = remember { MutableInteractionSource() }
-    val isHomeFocused by homeInteraction.collectIsFocusedAsState()
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(28.dp))
-                .focusable(interactionSource = homeInteraction)
-                .clickable(interactionSource = homeInteraction, indication = null) { onGoHome() }
-                .padding(vertical = 3.dp, horizontal = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(11.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(GoldPrimary, GoldAccent)))
-                    .border(if (isHomeFocused) 2.dp else 1.dp, GoldGlow, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(21.dp)
-                )
-            }
-            Text(
-                text = "KARAOKÊ",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Black,
-                color = TextWhite,
-                letterSpacing = 0.4.sp
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(Color(0x33181520))
-                .border(1.5.dp, if (isHomeFocused) GoldPrimary else Color(0x33FFFFFF), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Meu Perfil",
-                tint = if (isHomeFocused) GoldPrimary else TextMuted,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  2. PILL NAVIGATION BAR
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
 private fun PillNavigationBar(
     selectedTab: HomeTab,
     queueCount: Int,
@@ -395,26 +377,30 @@ private fun PillNavigationBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color(0x44141722))
-                .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(32.dp))
-                .padding(3.dp),
+            modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 18.dp)) {
+                Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White,
+                    modifier = Modifier.size(28.dp).clip(CircleShape).background(GoldPrimary).padding(6.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("KARAOKÊ", fontSize = 15.sp, fontFamily = ReferenceHeadingFont,
+                    fontWeight = FontWeight.Black, color = TextWhite)
+            }
             PillTabItem(
                 label = "Início",
                 icon = Icons.Default.Home,
                 isSelected = selectedTab == HomeTab.INICIO,
-                focusRequester = initialTabFocusRequester,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.INICIO },
                 onClick = { onTabSelected(HomeTab.INICIO) }
             )
 
             PillTabItem(
-                label = "Música",
+                label = "Músicas",
                 icon = Icons.Default.MusicNote,
                 isSelected = selectedTab == HomeTab.MUSICAS,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.MUSICAS },
                 onClick = { onTabSelected(HomeTab.MUSICAS) }
             )
 
@@ -422,6 +408,7 @@ private fun PillNavigationBar(
                 label = "Pesquisar",
                 icon = Icons.Default.Search,
                 isSelected = selectedTab == HomeTab.PESQUISAR,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.PESQUISAR },
                 onClick = { onTabSelected(HomeTab.PESQUISAR) }
             )
 
@@ -430,13 +417,15 @@ private fun PillNavigationBar(
                 icon = Icons.Default.QueueMusic,
                 badgeCount = queueCount,
                 isSelected = selectedTab == HomeTab.FILA,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.FILA },
                 onClick = { onTabSelected(HomeTab.FILA) }
             )
 
             PillTabItem(
-                label = "Pontuações",
+                label = "Ranking",
                 icon = Icons.Default.Leaderboard,
                 isSelected = selectedTab == HomeTab.RANKING,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.RANKING },
                 onClick = { onTabSelected(HomeTab.RANKING) }
             )
 
@@ -444,14 +433,17 @@ private fun PillNavigationBar(
                 label = "Favoritos",
                 icon = Icons.Default.Favorite,
                 isSelected = selectedTab == HomeTab.FAVORITOS,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.FAVORITOS },
                 onClick = { onTabSelected(HomeTab.FAVORITOS) }
             )
         }
 
-        QuickSearchPill(
-            query = searchQuery,
-            onQueryChange = onSearchQueryChange
-        )
+        if (selectedTab == HomeTab.INICIO) {
+            PillTabItem("Buscar", Icons.Default.Search, false,
+                onClick = { onTabSelected(HomeTab.PESQUISAR) })
+        } else {
+            QuickSearchPill(query = searchQuery, onQueryChange = onSearchQueryChange)
+        }
     }
 }
 
@@ -485,24 +477,18 @@ private fun PillTabItem(
         modifier = Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(RoundedCornerShape(24.dp))
-            .background(bgBrush)
-            .border(if (isSelected || isFocused) 1.5.dp else 0.dp, if (isFocused) GoldGlow else GoldPrimary, RoundedCornerShape(24.dp))
+            .background(if (isFocused) bgBrush else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent)))
+            .border(if (isFocused) 1.dp else 0.dp, if (isFocused) GoldGlow else Color.Transparent, RoundedCornerShape(24.dp))
             .focusable(interactionSource = interactionSource)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
-            .padding(horizontal = 15.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = contentColor,
-            modifier = Modifier.size(16.dp)
-        )
-
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 11.sp,
+            fontFamily = ReferenceBodyFont,
             fontWeight = if (isSelected || isFocused) FontWeight.ExtraBold else FontWeight.Medium,
             color = contentColor
         )
@@ -529,14 +515,14 @@ private fun PillTabItem(
 @Composable
 private fun QuickSearchPill(
     query: String,
-    onQueryChange: (String) -> Unit
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier.width(210.dp)
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     Row(
-        modifier = Modifier
-            .width(260.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0x33141722))
             .border(
@@ -578,7 +564,7 @@ private fun QuickSearchPill(
                 }
                 innerTextField()
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f).tvSearchFocusNavigation()
         )
 
         if (query.isNotEmpty()) {
@@ -606,10 +592,34 @@ private fun HomeDashboardView(
     onMusicClick: (MusicFile) -> Unit,
     onCantarAgora: () -> Unit,
     onGoToQueue: () -> Unit,
-    onGoToRanking: () -> Unit
+    onGoToRanking: () -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onViewAll: () -> Unit,
+    onArtistClick: (String) -> Unit
 ) {
     val dashboardMusics = remember(musics) { musics.take(12) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var animateStage by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            animateStage = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val stagePhase: State<Float> = if (animateStage) {
+        rememberInfiniteTransition(label = "stageMotion").animateFloat(
+            initialValue = 0f, targetValue = (2 * PI).toFloat(),
+            animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Restart),
+            label = "stagePhase")
+    } else remember { mutableFloatStateOf(0f) }
     val dashboardRecentMusics = remember(recentMusics) { recentMusics.take(12) }
+    val dashboardArtists = remember(musics) {
+        musics.groupingBy { it.artist }.eachCount().entries.sortedByDescending { it.value }.take(10)
+    }
 
     Column(
         modifier = Modifier
@@ -620,14 +630,34 @@ private fun HomeDashboardView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(235.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .height(240.dp)
                 .background(
                     Brush.horizontalGradient(
-                        listOf(Color(0xFF17101C), Color(0xFF0C0B12), Color(0xFF10101B))
+                        listOf(Color(0xFF100610), Color(0xFF030205), Color(0xFF05080D))
                     )
                 )
                 .drawBehind {
+                    val phase = stagePhase.value
+                    listOf(0.16f, 0.5f, 0.86f).forEachIndexed { index, x ->
+                        val sweep = sin(phase * (index + 1) + index * 1.7f) * 0.07f
+                        val beam = Path().apply {
+                            moveTo(size.width * x, 0f)
+                            lineTo(size.width * (x - 0.08f + sweep), size.height)
+                            lineTo(size.width * (x + 0.13f + sweep), size.height)
+                            lineTo(size.width * (x + 0.025f), 0f)
+                            close()
+                        }
+                        drawPath(beam, Brush.verticalGradient(listOf(
+                            (if (index == 2) Color(0xFF2B74B7) else Color(0xFFB62C92))
+                                .copy(alpha = 0.06f + 0.04f * (sin(phase * 2 + index) + 1f) / 2f),
+                            Color.Transparent)))
+                    }
+                    for (particle in 0..7) {
+                        val x = ((particle * 37 % 101) / 101f) * size.width
+                        val y = (((particle * 19 % 97) / 97f + phase / (2 * PI.toFloat()) * 0.08f) % 1f) * size.height
+                        drawCircle(Color.White.copy(alpha = 0.1f + 0.16f *
+                            (sin(phase * 3 + particle) + 1f) / 2f), 1.dp.toPx(), Offset(x, y))
+                    }
                     drawCircle(
                         brush = Brush.radialGradient(
                             listOf(Color(0x35E91E78), Color(0x162D4A8C), Color.Transparent),
@@ -638,7 +668,6 @@ private fun HomeDashboardView(
                         center = Offset(size.width * 0.82f, size.height * 0.48f)
                     )
                 }
-                .border(1.dp, Color(0x332D2635), RoundedCornerShape(24.dp))
                 .padding(horizontal = 28.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -646,17 +675,25 @@ private fun HomeDashboardView(
                 modifier = Modifier.weight(0.64f),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
+                Text("SEU KARAOKÊ", fontSize = 9.sp, letterSpacing = 2.sp,
+                    color = TextMuted, modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF291725)).padding(horizontal = 10.dp, vertical = 5.dp))
                 Text(
                     text = "Escolha sua música.\nPegue o microfone.",
-                    fontSize = 29.sp,
-                    lineHeight = 34.sp,
+                    fontSize = 26.sp,
+                    lineHeight = 30.sp,
+                    letterSpacing = (-0.72).sp,
+                    fontFamily = ReferenceHeadingFont,
                     fontWeight = FontWeight.Black,
                     color = TextWhite
                 )
                 Text(
                     text = "Solte a voz.",
-                    fontSize = 31.sp,
-                    lineHeight = 36.sp,
+                    fontSize = 26.sp,
+                    lineHeight = 30.sp,
+                    letterSpacing = (-0.72).sp,
+                    
+                    fontFamily = ReferenceHeadingFont,
                     fontWeight = FontWeight.Black,
                     color = GoldPrimary
                 )
@@ -677,7 +714,29 @@ private fun HomeDashboardView(
             Box(
                 modifier = Modifier
                     .weight(0.36f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .drawBehind {
+                        val phase = stagePhase.value
+                        val center = Offset(size.width / 2, size.height * 0.5f)
+                        val radius = size.minDimension * 0.35f
+                        drawCircle(Brush.radialGradient(listOf(GoldPrimary.copy(alpha =
+                            0.12f + 0.08f * (sin(phase * 6) + 1f) / 2f), Color.Transparent),
+                            center = center, radius = radius * 1.25f), radius * 1.25f, center)
+                        for (ring in 0..3) {
+                            drawCircle(Color(0x253E344B), radius + ring * 3.dp.toPx() +
+                                sin(phase * 6 - ring * 0.2f) * 1.5.dp.toPx(), center,
+                                style = Stroke(1.dp.toPx()))
+                        }
+                        for (bar in 0..23) {
+                            val height = (5f + (sin(phase * (12 + bar % 7) + bar * 1.9f) + 1f) *
+                                (9 + (bar * 17 % 15))).dp.toPx()
+                            drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF9F6CEE), GoldPrimary)),
+                                topLeft = Offset(size.width * 0.12f + bar * size.width * 0.032f,
+                                    size.height * 0.9f - height),
+                                size = androidx.compose.ui.geometry.Size(3.dp.toPx(), height),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -697,10 +756,15 @@ private fun HomeDashboardView(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Mic,
+                                imageVector = Icons.Default.MicNone,
                                 contentDescription = "Karaokê",
                                 tint = GoldPrimary,
-                                modifier = Modifier.size(54.dp)
+                                modifier = Modifier.size(54.dp).graphicsLayer {
+                                    rotationZ = -35f
+                                    val pulse = 1f + sin(stagePhase.value * 6) * 0.025f
+                                    scaleX = pulse
+                                    scaleY = pulse
+                                }
                             )
                         }
                     }
@@ -708,10 +772,18 @@ private fun HomeDashboardView(
             }
         }
 
+        QuickSearchPill(searchQuery, onSearchQueryChange,
+            modifier = Modifier.fillMaxWidth().height(42.dp))
+
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SectionHeader(title = "Músicas populares")
+            Text("CATÁLOGO", fontSize = 9.sp, letterSpacing = 2.sp, color = GoldPrimary)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                SectionHeader(title = "Músicas disponíveis")
+                PillTabItem("Ver todas", Icons.Default.ArrowForward, false, onClick = onViewAll)
+            }
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -722,6 +794,35 @@ private fun HomeDashboardView(
                         music = music,
                         onClick = { onMusicClick(music) }
                     )
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("NO PALCO", fontSize = 9.sp, letterSpacing = 2.sp, color = GoldPrimary)
+            SectionHeader(title = "Artistas do catálogo")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                items(dashboardArtists, key = { it.key }) { artist ->
+                    val interaction = remember { MutableInteractionSource() }
+                    val focused by interaction.collectIsFocusedAsState()
+                    Column(modifier = Modifier.width(110.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(if (focused) 2.dp else 0.dp,
+                            if (focused) GoldPrimary else Color.Transparent, RoundedCornerShape(12.dp))
+                        .focusable(interactionSource = interaction)
+                        .clickable(interactionSource = interaction, indication = null) { onArtistClick(artist.key) }
+                        .padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Box(Modifier.size(82.dp).clip(CircleShape).background(DarkCardSurface),
+                            contentAlignment = Alignment.Center) {
+                            Text(artist.key.split(' ').filter { it.isNotBlank() }.take(2)
+                                .joinToString("") { it.take(1).uppercase() },
+                                fontFamily = ReferenceHeadingFont, fontSize = 22.sp, color = GoldPrimary)
+                        }
+                        Text(artist.key, fontFamily = ReferenceBodyFont, fontSize = 11.sp,
+                            color = TextWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${artist.value} músicas", fontSize = 10.sp, color = TextMuted)
+                    }
                 }
             }
         }
@@ -805,6 +906,7 @@ private fun SectionHeader(title: String) {
     Text(
         text = title,
         fontSize = 15.sp,
+        fontFamily = ReferenceHeadingFont,
         fontWeight = FontWeight.Bold,
         color = TextWhite,
         modifier = Modifier.padding(start = 2.dp)
@@ -887,7 +989,7 @@ private fun SongCardItem(
                 code = music.code,
                 title = music.title,
                 artist = music.artist,
-                searchForArtwork = isFocused,
+                searchForArtwork = true,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -949,63 +1051,25 @@ fun SongAlbumArt(
     modifier: Modifier = Modifier
 ) {
     val repository = LocalArtworkRepository.current
+    val artworkRevision = LocalArtworkRevision.current
     val context = LocalContext.current
-    val artworkPath by produceState<String?>(null, repository, code, title, artist, searchForArtwork) {
+    val artworkPath by produceState<String?>(null, repository, code, title, artist, searchForArtwork, artworkRevision) {
         value = try {
-            repository?.getArtworkFile(
+            repository?.getThumbnailFile(
                 MusicFile(code = code, fileName = "", artist = artist, title = title, lyricsStart = ""),
-                searchOnline = searchForArtwork
+                edge = 256, searchOnline = searchForArtwork
             )?.absolutePath
         } catch (_: Exception) {
             null
         }
     }
 
-    val gradientColors = remember(code) {
-        val hash = (code.hashCode() + artist.hashCode()).let { if (it < 0) -it else it }
-        when (hash % 5) {
-            0 -> listOf(Color(0xFF382314), Color(0xFF1E130A))
-            1 -> listOf(Color(0xFF1A2234), Color(0xFF0F1420))
-            2 -> listOf(Color(0xFF321B2B), Color(0xFF1B0E17))
-            3 -> listOf(Color(0xFF1B2F2A), Color(0xFF0D1916))
-            else -> listOf(Color(0xFF2B2214), Color(0xFF161108))
-        }
-    }
-
     Box(
-        modifier = modifier.background(Brush.linearGradient(gradientColors)),
+        modifier = modifier.background(DarkCardElevated),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(85.dp)
-                .clip(CircleShape)
-                .border(1.dp, Color(0x1FFFFFFF), CircleShape)
-        )
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .border(1.dp, Color(0x2AFFFFFF), CircleShape)
-        )
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = if (title.isNotBlank()) title.take(1).uppercase() else "K",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Black,
-                color = GoldPrimary.copy(alpha = 0.9f)
-            )
-            Text(
-                text = code,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = TextWhite.copy(alpha = 0.8f)
-            )
-        }
+        Icon(Icons.Default.MusicNote, contentDescription = null, tint = TextMuted,
+            modifier = Modifier.size(28.dp))
 
         artworkPath?.let { path ->
             AsyncImage(
@@ -1142,14 +1206,7 @@ private fun MyScoresSummaryWidget(
                         modifier = Modifier.weight(1f)
                     ) {
                         if (index < 3 && entry.photoPath != null) {
-                            val decoded = remember(entry.photoPath) { BitmapFactory.decodeFile(entry.photoPath) }
-                            if (decoded != null) {
-                                Image(
-                                    bitmap = decoded.asImageBitmap(),
-                                    contentDescription = "Foto do cantor",
-                                    modifier = Modifier.size(34.dp).clip(CircleShape)
-                                )
-                            }
+                            SingerPhoto(entry.photoPath, Modifier.size(34.dp))
                         }
                         Box(
                             modifier = Modifier
@@ -1261,7 +1318,7 @@ private fun SongSearchView(
                         }
                         innerTextField()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).tvSearchFocusNavigation()
                 )
             }
         }
@@ -1359,7 +1416,7 @@ private fun FeaturedSearchCard(
 
                 Text(
                     text = music.code,
-                    fontSize = 36.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Black,
                     color = GoldPrimary
                 )
@@ -1491,7 +1548,7 @@ private fun SearchResultItem(
                     code = music.code,
                     title = music.title,
                     artist = music.artist,
-                    searchForArtwork = isFocused,
+                    searchForArtwork = true,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1622,7 +1679,7 @@ private fun QueueScreenView(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                itemsIndexed(upcomingMusics, key = { _, it -> "queue_${it.code}" }) { index, music ->
+                itemsIndexed(upcomingMusics, key = { index, it -> "queue_${index}_${it.code}" }) { index, music ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1707,8 +1764,9 @@ private fun MyScoresScreenView(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = "Minhas Melhores Pontuações",
-            fontSize = 17.sp,
+            text = "Pódio dos melhores",
+            fontFamily = ReferenceHeadingFont,
+            fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
             color = TextWhite
         )
@@ -1736,15 +1794,15 @@ private fun MyScoresScreenView(
             }
         } else {
             // Pódio Top 3 das Melhores Notas do Usuário
-            if (myScores.size >= 3) {
+            if (myScores.isNotEmpty()) {
                 val first = myScores[0]
-                val second = myScores[1]
-                val third = myScores[2]
+                val second = myScores.getOrNull(1)
+                val third = myScores.getOrNull(2)
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(135.dp),
+                        .height(230.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.Bottom
                 ) {
@@ -1753,7 +1811,7 @@ private fun MyScoresScreenView(
                         place = "2º",
                         bgColor = Color(0xFF282C38),
                         borderColor = Color(0xFF7A839E),
-                        modifier = Modifier.weight(1f).height(115.dp)
+                        modifier = Modifier.weight(1f).height(205.dp)
                     )
 
                     Spacer(modifier = Modifier.width(14.dp))
@@ -1761,10 +1819,10 @@ private fun MyScoresScreenView(
                     PodiumCard(
                         entry = first,
                         place = "1º",
-                        bgColor = BronzeGradient1,
-                        borderColor = GoldPrimary,
+                        bgColor = Color(0xFF302510),
+                        borderColor = Color(0xFFFFCF64),
                         isFirst = true,
-                        modifier = Modifier.weight(1.15f).height(135.dp)
+                        modifier = Modifier.weight(1.15f).height(230.dp)
                     )
 
                     Spacer(modifier = Modifier.width(14.dp))
@@ -1774,7 +1832,7 @@ private fun MyScoresScreenView(
                         place = "3º",
                         bgColor = Color(0xFF251E18),
                         borderColor = Color(0xFF9E6B4A),
-                        modifier = Modifier.weight(1f).height(100.dp)
+                        modifier = Modifier.weight(1f).height(185.dp)
                     )
                 }
             }
@@ -1833,7 +1891,7 @@ private fun MyScoresScreenView(
 
 @Composable
 private fun PodiumCard(
-    entry: UserScoreEntry,
+    entry: UserScoreEntry?,
     place: String,
     bgColor: Color,
     borderColor: Color,
@@ -1843,7 +1901,7 @@ private fun PodiumCard(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-            .background(bgColor)
+            .background(Brush.verticalGradient(listOf(borderColor.copy(alpha = 0.22f), bgColor)))
             .border(
                 width = if (isFirst) 2.dp else 1.dp,
                 color = borderColor,
@@ -1854,40 +1912,51 @@ private fun PodiumCard(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically)
         ) {
+            if (isFirst) {
+                Icon(Icons.Default.EmojiEvents, contentDescription = "Primeiro lugar",
+                    tint = borderColor, modifier = Modifier.size(24.dp))
+            }
+            SingerPhoto(entry?.photoPath, modifier = Modifier.size(if (isFirst) 76.dp else 62.dp), borderColor = borderColor)
             Text(
                 text = place,
-                fontSize = if (isFirst) 14.sp else 12.sp,
+                fontFamily = ReferenceHeadingFont,
+                fontSize = if (isFirst) 20.sp else 17.sp,
                 fontWeight = FontWeight.Black,
-                color = if (isFirst) GoldPrimary else TextWhite
+                color = borderColor
             )
-
-            if (entry.photoPath != null) {
-                val decoded = remember(entry.photoPath) { BitmapFactory.decodeFile(entry.photoPath) }
-                if (decoded != null) {
-                    Image(
-                        bitmap = decoded.asImageBitmap(),
-                        contentDescription = "Foto do cantor",
-                        modifier = Modifier.size(if (isFirst) 42.dp else 32.dp).clip(CircleShape)
-                    )
-                }
-            }
-
             Text(
-                text = "${entry.score} pts",
-                fontSize = if (isFirst) 15.sp else 12.5.sp,
+                text = entry?.let { "${it.score} pts" } ?: "Aguardando cantor",
+                fontSize = if (isFirst) 19.sp else 16.sp,
                 fontWeight = FontWeight.Black,
-                color = if (isFirst) GoldPrimary else TextWhite
+                color = if (isFirst) borderColor else TextWhite
             )
 
             Text(
-                text = entry.title,
-                fontSize = 10.5.sp,
+                text = entry?.title ?: "Cante para entrar no pódio",
+                fontSize = 11.5.sp,
                 color = TextMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (entry != null) {
+                Text(entry.artist, fontSize = 10.sp, color = TextSubtle, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SingerPhoto(photoPath: String?, modifier: Modifier = Modifier, borderColor: Color = GoldPrimary) {
+    Box(modifier = modifier.clip(CircleShape).background(DarkCardElevated)
+        .border(2.dp, borderColor, CircleShape), contentAlignment = Alignment.Center) {
+        Icon(Icons.Default.Person, contentDescription = "Cantor sem foto", tint = TextMuted,
+            modifier = Modifier.fillMaxSize(0.55f))
+        if (!photoPath.isNullOrBlank()) {
+            AsyncImage(model = File(photoPath), contentDescription = "Foto do cantor",
+                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
     }
 }
@@ -2002,7 +2071,7 @@ private fun FavoriteGridCard(
                     code = music.code,
                     title = music.title,
                     artist = music.artist,
-                    searchForArtwork = isFocused,
+                    searchForArtwork = true,
                     modifier = Modifier.fillMaxSize()
                 )
 

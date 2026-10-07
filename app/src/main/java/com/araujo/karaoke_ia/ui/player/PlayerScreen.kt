@@ -1,17 +1,17 @@
-@file:OptIn(ExperimentalTvMaterial3Api::class)
+@file:OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.araujo.karaoke_ia.ui.player
 
 import android.view.ViewGroup
+import android.os.Build
+import android.content.res.Configuration
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
@@ -31,13 +31,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -45,18 +54,23 @@ import androidx.tv.material3.Text
 import com.araujo.karaoke_ia.score.ScoreGenerator
 import com.araujo.karaoke_ia.remote.QrCodeGenerator
 import com.araujo.karaoke_ia.ui.theme.*
+import com.araujo.karaoke_ia.data.ArtworkRepository
+import com.araujo.karaoke_ia.ui.components.MusicArtwork
 import kotlinx.coroutines.delay
-import java.util.Locale
 
 @Composable
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 fun PlayerScreen(
     musicCode: String,
         remoteUrl: String? = null,
     onBack: () -> Unit,
     onFinish: (Int, String) -> Unit,
-    viewModel: PlayerViewModel
+    viewModel: PlayerViewModel,
+    artworkRepository: ArtworkRepository
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isTv = configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
     val musicFile by viewModel.musicFile
     val error by viewModel.error
 
@@ -120,10 +134,28 @@ fun PlayerScreen(
         return
     }
 
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
+    var savedPosition by rememberSaveable(mediaPath) { mutableLongStateOf(0L) }
+    val exoPlayer = remember(mediaPath) {
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+        if (Build.HARDWARE == "ranchu" || Build.HARDWARE == "goldfish") {
+            // The emulator's goldfish AVC decoder can crash its vendor codec service.
+            // Keep physical devices and secure/tunneled playback on the default selector.
+            renderersFactory.setMediaCodecSelector { mimeType, secure, tunneling ->
+                val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+                if (mimeType == "video/avc" && !secure && !tunneling &&
+                    decoders.any { it.softwareOnly }
+                ) {
+                    decoders.filterNot { it.name.contains("goldfish") }
+                } else {
+                    decoders
+                }
+            }
+        }
+        ExoPlayer.Builder(context, renderersFactory).build().apply {
             val mediaItem = MediaItem.fromUri(mediaPath)
             setMediaItem(mediaItem)
+            seekTo(savedPosition)
             prepare()
             playWhenReady = true
         }
@@ -132,8 +164,12 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(true) }
     var showControls by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var playbackError by remember(mediaPath) { mutableStateOf<String?>(null) }
+    var completed by remember(mediaPath) { mutableStateOf(false) }
+    val finish by rememberUpdatedState(onFinish)
 
     val playPauseFocusRequester = remember { FocusRequester() }
+    val playbackRetryFocusRequester = remember { FocusRequester() }
     val remoteQr = remember(remoteUrl) { remoteUrl?.let { QrCodeGenerator.createBitmap(it) } }
 
     BackHandler {
@@ -141,21 +177,42 @@ fun PlayerScreen(
         onBack()
     }
 
-    DisposableEffect(Unit) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(exoPlayer, lifecycleOwner) {
+        var resumePlayback = false
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                savedPosition = exoPlayer.currentPosition
+                resumePlayback = exoPlayer.isPlaying
+                exoPlayer.pause()
+            } else if (event == Lifecycle.Event.ON_RESUME && resumePlayback) {
+                resumePlayback = false
+                exoPlayer.play()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) {
+                if (state == Player.STATE_ENDED && !completed) {
+                    completed = true
                     val result = ScoreGenerator.generateScore()
-                    onFinish(result.score, result.feedback)
+                    finish(result.score, result.feedback)
                 }
             }
 
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
             }
+            override fun onPlayerError(error: PlaybackException) {
+                playbackError = "Não foi possível reproduzir este vídeo. Verifique o arquivo e o formato suportado pelo aparelho."
+                showControls = true
+            }
         }
         exoPlayer.addListener(listener)
         onDispose {
+            savedPosition = exoPlayer.currentPosition
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
@@ -164,6 +221,20 @@ fun PlayerScreen(
         if (showControls) {
             delay(4000)
             showControls = false
+        }
+    }
+
+    // Request focus after AnimatedVisibility has composed the controls.
+    LaunchedEffect(showControls, playbackError, isTv) {
+        if (isTv && showControls && playbackError == null) {
+            playPauseFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(playbackError, isTv) {
+        if (isTv && playbackError != null) {
+            withFrameNanos { }
+            playbackRetryFocusRequester.requestFocus()
         }
     }
 
@@ -203,7 +274,6 @@ fun PlayerScreen(
                         android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             if (!showControls) {
                                 triggerControls()
-                                try { playPauseFocusRequester.requestFocus() } catch (_: Exception) {}
                                 true
                             } else {
                                 lastInteractionTime = System.currentTimeMillis()
@@ -237,15 +307,15 @@ fun PlayerScreen(
 
         if (remoteQr != null) {
             Column(
-                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 androidx.compose.foundation.Image(
                     bitmap = remoteQr.asImageBitmap(),
                     contentDescription = "Controle remoto",
-                    modifier = Modifier.size(120.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier.size(if (isTv) 120.dp else 64.dp).clip(RoundedCornerShape(8.dp))
                 )
-                Text(
+                if (isTv) Text(
                     text = "Aponte o celular para adicionar músicas",
                     color = Color.White,
                     fontSize = 9.sp
@@ -258,7 +328,7 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(top = 20.dp),
+                .padding(top = 20.dp, start = 24.dp, end = if (remoteQr != null) { if (isTv) 240.dp else 112.dp } else 24.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -271,6 +341,8 @@ fun PlayerScreen(
                 Text(
                     text = "${currentMusic.title} - ${currentMusic.artist}",
                     fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.9f)
                 )
@@ -301,20 +373,26 @@ fun PlayerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .align(Alignment.TopCenter),
+                        .align(Alignment.TopCenter)
+                        .padding(end = if (remoteQr != null) { if (isTv) 220.dp else 90.dp } else 0.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(Modifier.weight(1f)) {
+                        MusicArtwork(currentMusic, artworkRepository, Modifier.size(if (isTv) 48.dp else 40.dp).clip(RoundedCornerShape(8.dp)))
                         Text(
                             text = currentMusic.title,
-                            fontSize = 22.sp,
+                            fontSize = if (isTv) 22.sp else 15.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.ExtraBold,
                             color = TextWhite
                         )
                         Text(
                             text = "${currentMusic.artist} • Código: ${currentMusic.code}",
                             fontSize = 13.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color = GoldPrimary
                         )
                     }
@@ -337,9 +415,9 @@ fun PlayerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Row(
+                    androidx.compose.foundation.layout.FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         PlayerControlButton(
                             icon = Icons.Default.Replay,
@@ -369,6 +447,8 @@ fun PlayerScreen(
                             label = "Ver Nota",
                             onClick = {
                                 exoPlayer.stop()
+                                if (completed) return@PlayerControlButton
+                                completed = true
                                 val result = ScoreGenerator.generateScore()
                                 onFinish(result.score, result.feedback)
                             },
@@ -376,6 +456,19 @@ fun PlayerScreen(
                         )
                     }
                 }
+            }
+        }
+        playbackError?.let { message ->
+            Column(Modifier.align(Alignment.Center).background(Color(0xDD09090E)).padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(message, color = TextWhite, modifier = Modifier.widthIn(max = 420.dp))
+                androidx.compose.material3.Button(
+                    modifier = Modifier.focusRequester(playbackRetryFocusRequester),
+                    onClick = { playbackError = null; exoPlayer.prepare(); exoPlayer.play() }
+                ) {
+                    androidx.compose.material3.Text("Tentar novamente")
+                }
+                androidx.compose.material3.Button(onClick = onBack) { androidx.compose.material3.Text("Voltar") }
             }
         }
     }
@@ -393,11 +486,8 @@ private fun PlayerControlButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
-    val bgBrush = when {
-        isFocused -> Brush.horizontalGradient(listOf(GoldGlow, GoldPrimary))
-        isPrimary -> Brush.horizontalGradient(listOf(GoldAccent, GoldDark))
-        else      -> Brush.horizontalGradient(listOf(Color(0xFF282015), Color(0xFF17110A)))
-    }
+    val bgBrush = Brush.horizontalGradient(listOf(if (isFocused || isPrimary) GoldPrimary else DarkCardElevated,
+        if (isFocused || isPrimary) GoldPrimary else DarkCardElevated))
 
     val borderColor = when {
         isFocused -> GoldGlow
@@ -413,10 +503,10 @@ private fun PlayerControlButton(
 
     Box(
         modifier = modifier
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(bgBrush)
             .border(if (isFocused) 2.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
-            .focusable(interactionSource = interactionSource)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null
@@ -445,11 +535,4 @@ private fun PlayerControlButton(
             )
         }
     }
-}
-
-private fun formatTime(millis: Long): String {
-    val totalSeconds = (millis / 1000).coerceAtLeast(0)
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
 }

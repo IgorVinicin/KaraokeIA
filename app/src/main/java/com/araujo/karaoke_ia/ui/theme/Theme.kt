@@ -23,9 +23,23 @@ fun KaraokeIATheme(
         onSurface    = TextOffWhite
     )
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography  = Typography,
-        content     = content
-    )
+    androidx.compose.material3.MaterialTheme(
+        colorScheme = androidx.compose.material3.darkColorScheme(
+            primary = GoldPrimary,
+            secondary = GoldAccent,
+            tertiary = BronzeBorder,
+            background = DarkCharcoalBg,
+            surface = DarkCardSurface,
+            onPrimary = Color.White,
+            onSecondary = Color.White,
+            onBackground = TextWhite,
+            onSurface = TextOffWhite
+        )
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

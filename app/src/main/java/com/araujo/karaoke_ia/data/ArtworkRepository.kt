@@ -2,6 +2,7 @@ package com.araujo.karaoke_ia.data
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -34,16 +35,48 @@ class ArtworkRepository(context: Context) {
     private val musicBrainzRateLock = Mutex()
     private var lastMusicBrainzRequestAt = 0L
 
+    /** Small persistent derivatives share the existing lookup and original cache. */
+    suspend fun getThumbnailFile(music: MusicFile, edge: Int = 128, searchOnline: Boolean = true): File? = withContext(Dispatchers.IO) {
+        val source = getArtworkFile(music, searchOnline) ?: return@withContext null
+        val size = edge.coerceIn(48, 512)
+        val target = File(artworkDirectory, "${source.nameWithoutExtension}_${size}.jpg")
+        imageLocks.getOrPut(target.name) { Mutex() }.withLock {
+            if (target.isFile && target.length() > 0L) return@withLock target
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(source.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withLock null
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / inSampleSize > size * 2) inSampleSize *= 2
+            }
+            val decoded = BitmapFactory.decodeFile(source.absolutePath, options) ?: return@withLock null
+            val ratio = minOf(1f, size.toFloat() / maxOf(decoded.width, decoded.height))
+            val scaled = Bitmap.createScaledBitmap(decoded, maxOf(1, (decoded.width * ratio).toInt()), maxOf(1, (decoded.height * ratio).toInt()), true)
+            val temporary = File(artworkDirectory, "${target.name}.tmp")
+            try {
+                val written = temporary.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+                if (!written || !temporary.renameTo(target)) return@withLock null
+                target
+            } catch (_: Exception) {
+                null
+            } finally {
+                if (scaled !== decoded) scaled.recycle()
+                decoded.recycle()
+                temporary.delete()
+            }
+        }
+    }
+
     suspend fun getArtworkFile(music: MusicFile, searchOnline: Boolean = true): File? = withContext(Dispatchers.IO) {
         val key = lookupKey(music)
-        requestLocks.computeIfAbsent(key) { Mutex() }.withLock {
+        requestLocks.getOrPut(key) { Mutex() }.withLock {
             val savedUrl = preferences.getString(urlPreference(key), null)
             if (savedUrl != null) {
                 val cachedFile = artworkFile(savedUrl)
                 if (cachedFile.isFile && cachedFile.length() > 0L) return@withLock cachedFile
                 if (!searchOnline) return@withLock null
                 if (!isOnline()) return@withLock null
-                downloadArtwork(savedUrl)?.let { return@withLock it }
+                networkSlots.withPermit { downloadArtwork(savedUrl) }?.let { return@withLock it }
                 preferences.edit().remove(urlPreference(key)).apply()
             }
             if (!searchOnline) return@withLock null
@@ -165,7 +198,7 @@ class ArtworkRepository(context: Context) {
 
     private suspend fun downloadArtwork(url: String): File? {
         val imageKey = sha256(url)
-        return imageLocks.computeIfAbsent(imageKey) { Mutex() }.withLock {
+        return imageLocks.getOrPut(imageKey) { Mutex() }.withLock {
             val target = artworkFile(url)
             if (target.isFile && target.length() > 0L) return@withLock target
             val bytes = requestBytes(url, userAgent = DEFAULT_USER_AGENT) ?: return@withLock null

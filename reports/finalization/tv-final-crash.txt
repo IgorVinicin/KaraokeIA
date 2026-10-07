@@ -1,0 +1,28 @@
+﻿--------- beginning of crash
+10-07 18:00:46.664   330  3618 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-07 18:00:46.664   330  3618 F DEBUG   : Build fingerprint: 'google/sdk_google_atv_x86/emulator_x86_arm:14/UTT1.240131.001.F1/11825476:user/dev-keys'
+10-07 18:00:46.664   330  3618 F DEBUG   : Revision: '0'
+10-07 18:00:46.664   330  3618 F DEBUG   : ABI: 'x86'
+10-07 18:00:46.664   330  3618 F DEBUG   : Timestamp: 2026-10-07 18:00:45.982692640+0000
+10-07 18:00:46.664   330  3618 F DEBUG   : Process uptime: 926s
+10-07 18:00:46.669   330  3618 F DEBUG   : Cmdline: /vendor/bin/hw/android.hardware.media.c2@1.0-service-goldfish
+10-07 18:00:46.669   330  3618 F DEBUG   : pid: 330, tid: 3618, name: sh.h264.decoder  >>> /vendor/bin/hw/android.hardware.media.c2@1.0-service-goldfish <<<
+10-07 18:00:46.669   330  3618 F DEBUG   : uid: 1013
+10-07 18:00:46.669   330  3618 F DEBUG   : signal 0 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr --------
+10-07 18:00:46.669   330  3618 F DEBUG   :     eax 00000000  ebx f3c48b90  ecx f2716144  edx 00000001
+10-07 18:00:46.669   330  3618 F DEBUG   :     edi f3bbb000  esi f01c28b0
+10-07 18:00:46.669   330  3618 F DEBUG   :     ebp f01bbd58  esp f01bbd20  eip f0a8b6f9
+10-07 18:00:46.669   330  3618 F DEBUG   : 12 total frames
+10-07 18:00:46.670   330  3618 F DEBUG   : backtrace:
+10-07 18:00:46.670   330  3618 F DEBUG   :       #00 pc 000316f9  /vendor/lib/libcodec2_goldfish_avcdec.so (android::C2GoldfishAvcDec::removePts(unsigned long long)+393) (BuildId: 339fdc04adf124184fb11583b50a8e14)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #01 pc 000324f9  /vendor/lib/libcodec2_goldfish_avcdec.so (android::C2GoldfishAvcDec::process(std::__1::unique_ptr<C2Work, std::__1::default_delete<C2Work> > const&, std::__1::shared_ptr<C2BlockPool> const&)+3417) (BuildId: 339fdc04adf124184fb11583b50a8e14)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #02 pc 0000d993  /vendor/lib/libcodec2_goldfish_common.so (android::SimpleC2Component::processQueue()+2227) (BuildId: b270dc6187511b1260d88307ca2ae5bb)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #03 pc 0000cc59  /vendor/lib/libcodec2_goldfish_common.so (android::SimpleC2Component::WorkHandler::onMessageReceived(android::sp<android::AMessage> const&)+185) (BuildId: b270dc6187511b1260d88307ca2ae5bb)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #04 pc 00016015  /apex/com.android.vndk.v34/lib/libstagefright_foundation.so (android::AHandler::deliverMessage(android::sp<android::AMessage> const&)+133) (BuildId: 52de84d9763709c54a365873f6c1146f)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #05 pc 0001abf2  /apex/com.android.vndk.v34/lib/libstagefright_foundation.so (android::AMessage::deliver()+114) (BuildId: 52de84d9763709c54a365873f6c1146f)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #06 pc 00016df3  /apex/com.android.vndk.v34/lib/libstagefright_foundation.so (android::ALooper::loop()+867) (BuildId: 52de84d9763709c54a365873f6c1146f)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #07 pc 00017c63  /apex/com.android.vndk.v34/lib/libstagefright_foundation.so (android::ALooper::LooperThread::threadLoop()+35) (BuildId: 52de84d9763709c54a365873f6c1146f)
+10-07 18:00:46.670   330  3618 F DEBUG   :       #08 pc 0000f312  /apex/com.android.vndk.v34/lib/libutils.so (android::Thread::_threadLoop(void*)+226) (BuildId: 5b1f9b423c8d9ace1dbff4237f173df5)
+10-07 18:00:46.671   330  3618 F DEBUG   :       #09 pc 000197e7  /apex/com.android.vndk.v34/lib/libutils.so (thread_data_t::trampoline(thread_data_t const*)+151) (BuildId: 5b1f9b423c8d9ace1dbff4237f173df5)
+10-07 18:00:46.671   330  3618 F DEBUG   :       #10 pc 000efd34  /apex/com.android.runtime/lib/bionic/libc.so (__pthread_start(void*)+100) (BuildId: 3243cb0a836ac895a8682dc3dc226aa5)
+10-07 18:00:46.671   330  3618 F DEBUG   :       #11 pc 0007d8d7  /apex/com.android.runtime/lib/bionic/libc.so (__start_thread+71) (BuildId: 3243cb0a836ac895a8682dc3dc226aa5)

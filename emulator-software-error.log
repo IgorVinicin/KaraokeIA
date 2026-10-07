@@ -1,0 +1,7 @@
+Failed to call cuInit, cannot use nvidia cuvid decoder for h264 stream
+[h264 @ 000001239C5A49C0] no frame!
+[h264 @ 000001239C5A49C0] no frame!
+[h264 @ 00000123B2B98400] no frame!
+[h264 @ 00000123B2B98400] no frame!
+[h264 @ 00000123A12CBC00] no frame!
+[h264 @ 00000123A12CBC00] no frame!

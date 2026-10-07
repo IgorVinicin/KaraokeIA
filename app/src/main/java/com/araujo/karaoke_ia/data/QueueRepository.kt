@@ -1,6 +1,8 @@
 package com.araujo.karaoke_ia.data
 
 import android.content.Context
+import android.content.SharedPreferences
+import java.io.Closeable
 
 /**
  * Gerencia e persiste a fila de músicas reservadas para cantar.
@@ -19,8 +21,16 @@ class QueueRepository(private val context: Context) {
         return raw.split(",").filter { it.isNotBlank() }
     }
 
+    fun observeChanges(onChanged: () -> Unit): Closeable {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_QUEUE) onChanged()
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return Closeable { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     /** Adiciona uma música ao final da fila de reservas. Retorna true se adicionou. */
-    fun addToQueue(code: String): Boolean {
+    @Synchronized fun addToQueue(code: String): Boolean {
         val current = getQueue().toMutableList()
         current.add(code)
         saveQueue(current)
@@ -28,14 +38,14 @@ class QueueRepository(private val context: Context) {
     }
 
     /** Remove uma música específica da fila. */
-    fun removeFromQueue(code: String) {
+    @Synchronized fun removeFromQueue(code: String) {
         val current = getQueue().toMutableList()
         current.remove(code)
         saveQueue(current)
     }
 
     /** Retorna e remove a próxima música da fila. */
-    fun popNext(): String? {
+    @Synchronized fun popNext(): String? {
         val current = getQueue().toMutableList()
         if (current.isEmpty()) return null
         val next = current.removeAt(0)
@@ -47,7 +57,7 @@ class QueueRepository(private val context: Context) {
     fun peekNext(): String? = getQueue().firstOrNull()
 
     /** Limpa toda a fila. */
-    fun clearQueue() {
+    @Synchronized fun clearQueue() {
         saveQueue(emptyList())
     }
 

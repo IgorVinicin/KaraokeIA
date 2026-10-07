@@ -1,0 +1,4 @@
+﻿--------- beginning of main
+10-07 18:00:46.806  3334  3612 E MediaCodec: Codec reported err 0xffffffe0/DEAD_OBJECT, actionCode 0, while in state 6/STARTED
+10-07 18:00:47.064  3334  3612 E MediaCodec: releaseOutputBuffer() is valid only at Executing states; currently at Released state
+10-07 18:00:47.303  3334  3612 E MediaCodec: flush() is valid only at Executing states; currently at Released state
