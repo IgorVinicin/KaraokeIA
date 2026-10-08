@@ -3,9 +3,10 @@ package com.araujo.karaoke_ia.data
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 data class UserScoreEntry(
-    val id: String = System.currentTimeMillis().toString(),
+    val id: String = UUID.randomUUID().toString(),
     val musicCode: String,
     val title: String,
     val artist: String,
@@ -24,7 +25,8 @@ class ScoreRepository(private val context: Context) {
     }
 
     /** Salva uma nova pontuação do usuário */
-    fun saveScore(musicCode: String, title: String, artist: String, score: Int) {
+    @Synchronized
+    fun saveScore(musicCode: String, title: String, artist: String, score: Int): UserScoreEntry {
         val scores = getAllScores().toMutableList()
         val newEntry = UserScoreEntry(
             musicCode = musicCode,
@@ -50,6 +52,7 @@ class ScoreRepository(private val context: Context) {
         }
 
         prefs.edit().putString(KEY_SCORES, jsonArray.toString()).apply()
+        return newEntry
     }
 
     /** Retorna todas as pontuações do usuário em ordem cronológica (mais recentes primeiro) */
@@ -81,6 +84,12 @@ class ScoreRepository(private val context: Context) {
         return getAllScores().sortedByDescending { it.score }
     }
 
+    fun getPodiumPosition(scoreId: String): Int? {
+        val scores = getBestScores()
+        return (1..3).firstOrNull { scores.podiumEntry(it)?.id == scoreId }
+    }
+
+    @Synchronized
     fun attachPhotoToScore(scoreId: String, photoPath: String) {
         val scores = getAllScores().toMutableList()
         val index = scores.indexOfFirst { it.id == scoreId }
@@ -101,4 +110,16 @@ class ScoreRepository(private val context: Context) {
         }
         prefs.edit().putString(KEY_SCORES, jsonArray.toString()).apply()
     }
+}
+
+/** Each podium place has its own score range; an unfilled place remains empty. */
+fun List<UserScoreEntry>.podiumEntry(place: Int): UserScoreEntry? {
+    val range = when (place) {
+        1 -> 96..100
+        2 -> 90..95
+        3 -> 87..89
+        else -> return null
+    }
+    return filter { it.score in range }
+        .maxWithOrNull(compareBy<UserScoreEntry> { it.score }.thenBy { it.timestamp })
 }

@@ -56,6 +56,7 @@ import com.araujo.karaoke_ia.remote.QrCodeGenerator
 import com.araujo.karaoke_ia.ui.theme.*
 import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.ui.components.MusicArtwork
+import com.araujo.karaoke_ia.ui.components.stageBackground
 import kotlinx.coroutines.delay
 
 @Composable
@@ -82,7 +83,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkCharcoalBg),
+                .stageBackground(),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -112,7 +113,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkCharcoalBg),
+                .stageBackground(),
             contentAlignment = Alignment.Center
         ) {
             androidx.compose.material3.CircularProgressIndicator(color = GoldPrimary)
@@ -126,7 +127,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkCharcoalBg),
+                .stageBackground(),
             contentAlignment = Alignment.Center
         ) {
             Text(text = "Arquivo de música inválido ou ausente.", color = Color.White)
@@ -323,8 +324,8 @@ fun PlayerScreen(
             }
         }
 
-        // Top Header
-        Box(
+        // Keep the title off the lyrics until the remote reveals the controls.
+        if (showControls) Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
@@ -334,8 +335,8 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0x88000000))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(20.dp))
+                    .background(DarkSlateSurface.copy(alpha = 0.8f))
+                    .border(1.dp, GoldPrimary.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
                     .padding(horizontal = 18.dp, vertical = 6.dp)
             ) {
                 Text(
@@ -495,11 +496,7 @@ private fun PlayerControlButton(
         else      -> BronzeBorder
     }
 
-    val contentColor = when {
-        isFocused -> DarkCharcoalBg
-        isPrimary -> DarkCharcoalBg
-        else      -> TextWhite
-    }
+    val contentColor = TextWhite
 
     Box(
         modifier = modifier

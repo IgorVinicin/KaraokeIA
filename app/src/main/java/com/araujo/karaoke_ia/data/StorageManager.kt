@@ -61,11 +61,11 @@ class StorageManager(private val context: Context) {
     }
 
     fun findExternalStoragePath(): String {
+        val extStorage = Environment.getExternalStorageDirectory().absolutePath
         val sharedStorageCandidates = listOf(
-            "/sdcard/Download/karaoke",
-            "/storage/emulated/0/Download/karaoke",
-            "/storage/emulated/0/karaoke",
-            "/storage/emulated/0/KARAOKE"
+            "$extStorage/Download/karaoke",
+            "$extStorage/karaoke",
+            "$extStorage/KARAOKE"
         )
         sharedStorageCandidates.firstOrNull { isPathValid(it) }?.let { return it }
 
@@ -75,7 +75,6 @@ class StorageManager(private val context: Context) {
             ?.firstNotNullOfOrNull { findKaraokeDirectory(it) }
             ?.let { return it.absolutePath }
 
-        val extStorage = Environment.getExternalStorageDirectory().absolutePath
         val possiblePaths = listOf(
             "$extStorage/Download/karaoke",
             "$extStorage/Download/KARAOKE",

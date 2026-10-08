@@ -3,15 +3,18 @@ package com.araujo.karaoke_ia.util
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
 import kotlin.math.sin
 
 object SoundEffectHelper {
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
      * Toca uma sequência sonora festiva de acordo com a pontuação obtida
@@ -24,8 +27,10 @@ object SoundEffectHelper {
                     score >= 80 -> playGoodJobChime()
                     else        -> playEncouragementChime()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w("SoundEffectHelper", "Falha ao reproduzir efeito sonoro", e)
             }
         }
     }
@@ -110,13 +115,9 @@ object SoundEffectHelper {
             track.write(buffer, 0, buffer.size)
             track.play()
             delay(totalMs.toLong() + 100)
-        } catch (e: Exception) {
-            e.printStackTrace()
         } finally {
-            try {
-                track?.stop()
-                track?.release()
-            } catch (_: Exception) {}
+            runCatching { track?.stop() }
+            track?.release()
         }
     }
 }

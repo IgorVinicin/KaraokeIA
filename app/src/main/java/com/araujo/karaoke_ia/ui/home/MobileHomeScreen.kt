@@ -1,5 +1,6 @@
 package com.araujo.karaoke_ia.ui.home
 
+import com.araujo.karaoke_ia.ui.components.stageBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,12 +25,13 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.UserScoreEntry
+import com.araujo.karaoke_ia.data.podiumEntry
 import com.araujo.karaoke_ia.ui.theme.*
 import java.io.File
 
 /** Touch layout independent of the TV focus navigation, with one shared catalogue and queue. */
 @Composable
-internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit) {
+internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit, onModes: () -> Unit = {}) {
     val selected by viewModel.selectedTab
     val query by viewModel.searchQuery
     val all by viewModel.allMusics
@@ -45,7 +47,7 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
     val colorScheme = darkColorScheme(primary = GoldPrimary, background = DarkCharcoalBg,
         surface = DarkCharcoalBg, onSurface = TextWhite, onPrimary = Color.White)
     MaterialTheme(colorScheme = colorScheme) {
-        Scaffold(containerColor = DarkCharcoalBg, bottomBar = {
+        Scaffold(containerColor = Color.Transparent, bottomBar = {
             NavigationBar(containerColor = DarkCardElevated, modifier = Modifier.navigationBarsPadding()) {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(selected = selected == tab || (tab == HomeTab.MUSICAS && selected == HomeTab.PESQUISAR),
@@ -56,7 +58,7 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                 }
             }
         }) { padding ->
-            BoxWithConstraints(Modifier.fillMaxSize().padding(padding).statusBarsPadding()) {
+            BoxWithConstraints(Modifier.fillMaxSize().stageBackground().padding(padding).statusBarsPadding()) {
                 val wide = maxWidth >= 600.dp
                 val contentWidth = if (wide) 840.dp else maxWidth
                 Column(Modifier.widthIn(max = contentWidth).fillMaxSize().align(Alignment.TopCenter)
@@ -65,6 +67,9 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                         Icon(Icons.Default.Mic, null, tint = GoldPrimary, modifier = Modifier.size(24.dp))
                         Text("Karaokê", Modifier.weight(1f).padding(start = 8.dp), fontFamily = ReferenceHeadingFont,
                             fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { historySelected = false; viewModel.onTabSelected(HomeTab.CONFIGURACOES) }) {
+                            Icon(Icons.Default.Settings, "Configurações", tint = GoldPrimary)
+                        }
                         if (selected == HomeTab.INICIO) TextButton(onClick = { historySelected = !historySelected }) {
                             Text(if (historySelected) "Início" else "Histórico")
                         }
@@ -81,6 +86,14 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                             } })
                     }
                     when {
+                        selected == HomeTab.CONFIGURACOES -> {
+                            Text("Configurações da sessão", fontFamily = ReferenceHeadingFont, color = TextWhite)
+                            Text("Catálogo local: ${all.size} músicas", color = TextMuted)
+                            Button(onClick = onModes) { Text("Trocar modo online / offline") }
+                            OutlinedButton(onClick = { viewModel.loadAllMusics() }) { Text("Atualizar catálogo") }
+                            OutlinedButton(enabled = viewModel.artworkBatchProgress.value == null,
+                                onClick = { viewModel.fetchMissingArtwork() }) { Text("Buscar capas") }
+                        }
                         selected == HomeTab.RANKING -> MobileRanking(scores, Modifier.weight(1f))
                         viewModel.isLoading.value -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
@@ -172,7 +185,7 @@ private fun MobileRanking(scores: List<UserScoreEntry>, modifier: Modifier) {
         else item {
             Row(Modifier.fillMaxWidth().height(220.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                 listOf(1, 0, 2).forEach { index ->
-                    val entry = scores.getOrNull(index)
+                    val entry = scores.podiumEntry(index + 1)
                     val color = when (index) { 0 -> Color(0xFFFFCF64); 1 -> Color(0xFFACB6C8); else -> Color(0xFFCA946F) }
                     Column(Modifier.weight(1f).height(if (index == 0) 220.dp else if (index == 1) 195.dp else 175.dp)
                         .background(color.copy(alpha = 0.10f), MaterialTheme.shapes.medium).padding(8.dp),

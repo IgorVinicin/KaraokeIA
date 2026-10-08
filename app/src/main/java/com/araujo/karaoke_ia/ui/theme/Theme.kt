@@ -34,6 +34,15 @@ fun KaraokeIATheme(
             onSecondary = Color.White,
             onBackground = TextWhite,
             onSurface = TextOffWhite
+        ),
+        typography = androidx.compose.material3.Typography(
+            headlineLarge = androidx.compose.material3.Typography().headlineLarge.copy(fontFamily = ReferenceHeadingFont),
+            headlineMedium = androidx.compose.material3.Typography().headlineMedium.copy(fontFamily = ReferenceHeadingFont),
+            titleLarge = androidx.compose.material3.Typography().titleLarge.copy(fontFamily = ReferenceHeadingFont),
+            titleMedium = androidx.compose.material3.Typography().titleMedium.copy(fontFamily = ReferenceBodyFont),
+            bodyLarge = androidx.compose.material3.Typography().bodyLarge.copy(fontFamily = ReferenceBodyFont),
+            bodyMedium = androidx.compose.material3.Typography().bodyMedium.copy(fontFamily = ReferenceBodyFont),
+            labelLarge = androidx.compose.material3.Typography().labelLarge.copy(fontFamily = ReferenceBodyFont)
         )
     ) {
         MaterialTheme(

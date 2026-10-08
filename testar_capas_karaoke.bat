@@ -9,7 +9,7 @@ set "PACKAGE=com.araujo.karaoke_ia"
 set "AVD=Television_1080p"
 set "EMULATOR_RAM=1536"
 set "EMULATOR_CORES=2"
-set "EMULATOR_RESOLUTION=1280x720"
+set "EMULATOR_RESOLUTION=960x540"
 if not defined EMULATOR_GPU set "EMULATOR_GPU=swiftshader_indirect"
 set "EMULATOR_LOG=%ROOT%emulador-tv.log"
 set "APP_LOG=%ROOT%karaoke-logcat.txt"
@@ -81,7 +81,7 @@ echo Pasta de musicas: %KARAOKE_SOURCE%
 echo.
 
 echo [1/5] Compilando o APK atualizado...
-call "%ROOT%gradlew.bat" :app:assembleDebug "-Pkotlin.incremental=false" --no-daemon
+call "%ROOT%gradlew.bat" :app:assembleDebug "-Pkotlin.incremental=false" --no-daemon --max-workers=2
 if errorlevel 1 (
     echo [ERRO] Falha na compilacao.
     goto error
@@ -96,7 +96,7 @@ if errorlevel 1 (
     echo [2/5] Iniciando o emulador Android TV no PC...
     echo Configuracao leve: %EMULATOR_CORES% nucleos, %EMULATOR_RAM% MB RAM, %EMULATOR_RESOLUTION%.
     echo Log do emulador: %EMULATOR_LOG%
-    start "Karaoke - Emulador" /b "%EMULATOR%" -avd %AVD% -cores %EMULATOR_CORES% -memory %EMULATOR_RAM% -skin %EMULATOR_RESOLUTION% -gpu %EMULATOR_GPU% -no-audio -no-snapshot >"%EMULATOR_LOG%" 2>&1
+    start "Karaoke - Emulador" /b "%EMULATOR%" -avd %AVD% -cores %EMULATOR_CORES% -memory %EMULATOR_RAM% -skin %EMULATOR_RESOLUTION% -dpi-device 240 -gpu %EMULATOR_GPU% -no-boot-anim -no-snapshot >"%EMULATOR_LOG%" 2>&1
 ) else (
     echo [2/5] Emulador Android TV ja esta aberto no PC.
     "%ADB%" devices
@@ -132,14 +132,20 @@ goto waitboot
 
 :bootcomplete
 timeout /t 3 /nobreak >nul
+"%ADB%" -e shell settings put secure show_ime_with_hard_keyboard 1
 
 echo [4/5] Instalando APK e copiando as musicas para o emulador...
-"%ADB%" -e install -r "%APK%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\instalar-apk.ps1" -Adb "%ADB%" -Apk "%APK%"
 if errorlevel 1 (
     echo [ERRO] Falha ao instalar o APK.
     goto error
 )
 "%ADB%" -e shell appops set %PACKAGE% MANAGE_EXTERNAL_STORAGE allow
+if exist "%ROOT%app\.env" (
+    for /f "tokens=*" %%S in ('"%ADB%" -e get-serialno') do set "YOUTUBE_SERIAL=%%S"
+    call :configureyoutube
+    if errorlevel 1 goto error
+)
 "%ADB%" -e shell rm -rf /sdcard/Download/karaoke
 "%ADB%" -e shell mkdir -p /sdcard/Download
 "%ADB%" -e push "%KARAOKE_SOURCE%" /sdcard/Download/
@@ -225,6 +231,11 @@ for %%F in ("%~1\dados\*.txt") do (
     )
 )
 exit /b 1
+
+:configureyoutube
+echo Configurando a busca YouTube somente neste emulador...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\configurar-youtube.ps1" -Serial "%YOUTUBE_SERIAL%" -NoRestart
+exit /b %ERRORLEVEL%
 
 :error
 echo.

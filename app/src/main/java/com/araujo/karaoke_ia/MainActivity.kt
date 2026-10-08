@@ -72,10 +72,6 @@ class MainActivity : ComponentActivity() {
             registerReceiver(mediaReceiver, mediaFilter)
         }
 
-        if (!hadStoragePermission) {
-            storageManager.requestAllFilesPermission()
-        }
-
         setContent {
             KaraokeIATheme {
                 Surface(

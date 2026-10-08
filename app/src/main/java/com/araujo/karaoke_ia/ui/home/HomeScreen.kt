@@ -1,13 +1,7 @@
 @file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.araujo.karaoke_ia.ui.home
 
-import android.graphics.BitmapFactory
 import androidx.compose.animation.*
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -41,6 +35,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.araujo.karaoke_ia.ui.components.stageBackground
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,7 +54,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -70,12 +67,11 @@ import coil.request.ImageRequest
 import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.UserScoreEntry
+import com.araujo.karaoke_ia.data.podiumEntry
 import com.araujo.karaoke_ia.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitCancellation
 import java.io.File
-import kotlin.math.PI
-import kotlin.math.sin
 
 private val LocalArtworkRepository = staticCompositionLocalOf<ArtworkRepository?> { null }
 private val LocalArtworkRevision = staticCompositionLocalOf { 0 }
@@ -95,7 +91,8 @@ private fun Modifier.tvSearchFocusNavigation(): Modifier {
 @Composable
 fun HomeScreen(
     onNavigateToPlayer: (String) -> Unit,
-    viewModel: HomeViewModel
+    viewModel: HomeViewModel,
+    onModes: () -> Unit = {}
 ) {
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val isTelevision = configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
@@ -103,7 +100,7 @@ fun HomeScreen(
     if (!isTelevision) {
         CompositionLocalProvider(LocalArtworkRepository provides viewModel.artworkRepository,
             LocalArtworkRevision provides viewModel.artworkRevision.value) {
-            MobileHomeScreen(viewModel, onNavigateToPlayer)
+            MobileHomeScreen(viewModel, onNavigateToPlayer, onModes)
         }
         return
     }
@@ -131,12 +128,15 @@ fun HomeScreen(
     val showQuickCodeHud    by viewModel.showQuickCodeHud
 
     val initialTabFocusRequester = remember { FocusRequester() }
+    val selectedCoverFocusRequester = remember { FocusRequester() }
     val homeLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(homeLifecycleOwner) {
         homeLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             // NavHost resumes this entry after its transition and player view disposal.
             withFrameNanos { }
-            initialTabFocusRequester.requestFocus()
+            if (viewModel.selectedTab.value == HomeTab.INICIO && viewModel.allMusics.value.isNotEmpty()) {
+                selectedCoverFocusRequester.requestFocus()
+            } else initialTabFocusRequester.requestFocus()
             awaitCancellation()
         }
     }
@@ -164,19 +164,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .drawBehind {
-                // Fundo escuro de palco com luzes magenta e azul discretas.
-                drawRect(color = DarkCharcoalBg)
-
-                // Luz ambiente inspirada nos refletores do palco da referência.
-
-                // Vinheta inferior
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        listOf(Color.Transparent, Color(0x99000000), Color(0xEE090A0D))
-                    )
-                )
-            }
+            .stageBackground()
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     val keyCode = keyEvent.nativeKeyEvent.keyCode
@@ -232,13 +220,7 @@ fun HomeScreen(
                 queueCount = queueCodes.size,
                 initialTabFocusRequester = initialTabFocusRequester,
                 onTabSelected = { viewModel.onTabSelected(it) },
-                searchQuery = searchQuery,
-                onSearchQueryChange = {
-                    viewModel.onSearchQueryChange(it)
-                    if (selectedTab != HomeTab.PESQUISAR) {
-                        viewModel.onTabSelected(HomeTab.PESQUISAR)
-                    }
-                }
+
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -246,6 +228,27 @@ fun HomeScreen(
             // ── 3. Visualização da Aba ───────────────────────────────────────
             Box(modifier = Modifier.weight(1f)) {
                 when {
+                    selectedTab == HomeTab.CONFIGURACOES -> {
+                        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            SectionHeader("Sua biblioteca")
+                            Text("Cat\u00e1logo local: ${allMusics.size} m\u00fasicas", color = TextMuted)
+                            Text("M\u00fasicas e capas salvas no dispositivo. Pontua\u00e7\u00e3o recreativa.", color = TextMuted)
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                PillTabItem("Favoritos", Icons.Default.Favorite, false,
+                                    onClick = { viewModel.onTabSelected(HomeTab.FAVORITOS) })
+                                PillTabItem("Hist\u00f3rico", Icons.Default.History, false,
+                                    onClick = { viewModel.onTabSelected(HomeTab.INICIO) })
+                                PillTabItem("Atualizar cat\u00e1logo", Icons.Default.Refresh, false,
+                                    onClick = { viewModel.loadAllMusics() })
+                                PillTabItem("Buscar capas", Icons.Default.Image, false,
+                                    onClick = { viewModel.fetchMissingArtwork() })
+                            }
+                            artworkBatchProgress?.let { Text("Capas: ${it.completed}/${it.total}", color = TextMuted) }
+                            PillTabItem("Trocar modo online / offline", Icons.Default.SwapHoriz, false,
+                                onClick = onModes)
+                        }
+                    }
+
                     selectedTab == HomeTab.RANKING -> {
                         MyScoresScreenView(
                             myScores = myBestScores,
@@ -273,22 +276,13 @@ fun HomeScreen(
                             queueCount = queueCodes.size,
                             myBestScores = myBestScores,
                             onMusicClick = { onNavigateToPlayer(it.code) },
-                            onCantarAgora = {
-                                val codeToPlay = queueCodes.firstOrNull() ?: allMusics.firstOrNull()?.code ?: return@HomeDashboardView
-                                onNavigateToPlayer(codeToPlay)
-                            },
                             onGoToQueue = { viewModel.onTabSelected(HomeTab.FILA) },
                             onGoToRanking = { viewModel.onTabSelected(HomeTab.RANKING) },
-                            searchQuery = searchQuery,
-                            onSearchQueryChange = {
-                                viewModel.onSearchQueryChange(it)
-                                viewModel.onTabSelected(HomeTab.PESQUISAR)
-                            },
-                            onViewAll = { viewModel.onTabSelected(HomeTab.MUSICAS) },
-                            onArtistClick = {
-                                viewModel.onTabSelected(HomeTab.MUSICAS)
-                                viewModel.onArtistSelected(it)
-                            }
+                            favoriteCodes = favorites,
+                            queueCodes = queueCodes,
+                            onFavorite = { viewModel.toggleFavorite(it) },
+                            onQueue = { viewModel.addToQueue(it) },
+                            selectedCoverFocusRequester = selectedCoverFocusRequester
                         )
                     }
 
@@ -367,9 +361,7 @@ private fun PillNavigationBar(
     selectedTab: HomeTab,
     queueCount: Int,
     initialTabFocusRequester: FocusRequester,
-    onTabSelected: (HomeTab) -> Unit,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit
+    onTabSelected: (HomeTab) -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -397,7 +389,15 @@ private fun PillNavigationBar(
             )
 
             PillTabItem(
-                label = "Músicas",
+                label = "Pesquisar",
+                icon = Icons.Default.Search,
+                isSelected = selectedTab == HomeTab.PESQUISAR,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.PESQUISAR },
+                onClick = { onTabSelected(HomeTab.PESQUISAR) }
+            )
+
+            PillTabItem(
+                label = "Categorias",
                 icon = Icons.Default.MusicNote,
                 isSelected = selectedTab == HomeTab.MUSICAS,
                 focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.MUSICAS },
@@ -405,11 +405,11 @@ private fun PillNavigationBar(
             )
 
             PillTabItem(
-                label = "Pesquisar",
-                icon = Icons.Default.Search,
-                isSelected = selectedTab == HomeTab.PESQUISAR,
-                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.PESQUISAR },
-                onClick = { onTabSelected(HomeTab.PESQUISAR) }
+                label = "Ranking",
+                icon = Icons.Default.Leaderboard,
+                isSelected = selectedTab == HomeTab.RANKING,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.RANKING },
+                onClick = { onTabSelected(HomeTab.RANKING) }
             )
 
             PillTabItem(
@@ -422,28 +422,14 @@ private fun PillNavigationBar(
             )
 
             PillTabItem(
-                label = "Ranking",
-                icon = Icons.Default.Leaderboard,
-                isSelected = selectedTab == HomeTab.RANKING,
-                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.RANKING },
-                onClick = { onTabSelected(HomeTab.RANKING) }
-            )
-
-            PillTabItem(
-                label = "Favoritos",
-                icon = Icons.Default.Favorite,
-                isSelected = selectedTab == HomeTab.FAVORITOS,
-                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.FAVORITOS },
-                onClick = { onTabSelected(HomeTab.FAVORITOS) }
+                label = "Configura\u00e7\u00f5es",
+                icon = Icons.Default.Settings,
+                isSelected = selectedTab == HomeTab.CONFIGURACOES,
+                focusRequester = initialTabFocusRequester.takeIf { selectedTab == HomeTab.CONFIGURACOES || selectedTab == HomeTab.FAVORITOS },
+                onClick = { onTabSelected(HomeTab.CONFIGURACOES) }
             )
         }
 
-        if (selectedTab == HomeTab.INICIO) {
-            PillTabItem("Buscar", Icons.Default.Search, false,
-                onClick = { onTabSelected(HomeTab.PESQUISAR) })
-        } else {
-            QuickSearchPill(query = searchQuery, onQueryChange = onSearchQueryChange)
-        }
     }
 }
 
@@ -468,23 +454,24 @@ private fun PillTabItem(
     }
 
     val contentColor = when {
-        isFocused  -> DarkCharcoalBg
+        isFocused  -> TextWhite
         isSelected -> GoldPrimary
         else       -> TextMuted
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clip(RoundedCornerShape(24.dp))
-            .background(if (isFocused) bgBrush else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent)))
-            .border(if (isFocused) 1.dp else 0.dp, if (isFocused) GoldGlow else Color.Transparent, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(bgBrush)
+            .border(if (isFocused) 1.dp else 0.dp, if (isFocused) GoldGlow else Color.Transparent, RoundedCornerShape(10.dp))
             .focusable(interactionSource = interactionSource)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
+        Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(22.dp))
         Text(
             text = label,
             fontSize = 11.sp,
@@ -512,345 +499,72 @@ private fun PillTabItem(
     }
 }
 
-@Composable
-private fun QuickSearchPill(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    modifier: Modifier = Modifier.width(210.dp)
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0x33141722))
-            .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) GoldPrimary else Color(0x22FFFFFF),
-                shape = RoundedCornerShape(24.dp)
-            )
-            .focusable(interactionSource = interactionSource)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = "Buscar",
-            tint = if (isFocused) GoldPrimary else TextSubtle,
-            modifier = Modifier.size(15.dp)
-        )
-
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = TextStyle(
-                color = TextWhite,
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.Medium
-            ),
-            cursorBrush = SolidColor(GoldPrimary),
-            decorationBox = { innerTextField ->
-                if (query.isEmpty()) {
-                    Text(
-                        text = "Buscar música ou código...",
-                        fontSize = 12.5.sp,
-                        color = TextSubtle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                innerTextField()
-            },
-            modifier = Modifier.weight(1f).tvSearchFocusNavigation()
-        )
-
-        if (query.isNotEmpty()) {
-            Icon(
-                imageVector = Icons.Default.Clear,
-                contentDescription = "Limpar",
-                tint = TextMuted,
-                modifier = Modifier
-                    .size(15.dp)
-                    .clickable { onQueryChange("") }
-            )
-        }
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  3. HOME DASHBOARD VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun HomeDashboardView(
-    musics: List<MusicFile>,
-    recentMusics: List<MusicFile>,
-    queueCount: Int,
-    myBestScores: List<UserScoreEntry>,
-    onMusicClick: (MusicFile) -> Unit,
-    onCantarAgora: () -> Unit,
-    onGoToQueue: () -> Unit,
-    onGoToRanking: () -> Unit,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    onViewAll: () -> Unit,
-    onArtistClick: (String) -> Unit
+    musics: List<MusicFile>, recentMusics: List<MusicFile>, queueCount: Int,
+    myBestScores: List<UserScoreEntry>, onMusicClick: (MusicFile) -> Unit,
+    onGoToQueue: () -> Unit, onGoToRanking: () -> Unit,
+    favoriteCodes: Set<String>, queueCodes: List<String>,
+    onFavorite: (String) -> Unit, onQueue: (String) -> Unit,
+    selectedCoverFocusRequester: FocusRequester
 ) {
-    val dashboardMusics = remember(musics) { musics.take(12) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var animateStage by remember(lifecycleOwner) {
-        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
-    }
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, _ ->
-            animateStage = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    val stagePhase: State<Float> = if (animateStage) {
-        rememberInfiniteTransition(label = "stageMotion").animateFloat(
-            initialValue = 0f, targetValue = (2 * PI).toFloat(),
-            animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Restart),
-            label = "stagePhase")
-    } else remember { mutableFloatStateOf(0f) }
-    val dashboardRecentMusics = remember(recentMusics) { recentMusics.take(12) }
-    val dashboardArtists = remember(musics) {
-        musics.groupingBy { it.artist }.eachCount().entries.sortedByDescending { it.value }.take(10)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(240.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Color(0xFF100610), Color(0xFF030205), Color(0xFF05080D))
-                    )
-                )
-                .drawBehind {
-                    val phase = stagePhase.value
-                    listOf(0.16f, 0.5f, 0.86f).forEachIndexed { index, x ->
-                        val sweep = sin(phase * (index + 1) + index * 1.7f) * 0.07f
-                        val beam = Path().apply {
-                            moveTo(size.width * x, 0f)
-                            lineTo(size.width * (x - 0.08f + sweep), size.height)
-                            lineTo(size.width * (x + 0.13f + sweep), size.height)
-                            lineTo(size.width * (x + 0.025f), 0f)
-                            close()
-                        }
-                        drawPath(beam, Brush.verticalGradient(listOf(
-                            (if (index == 2) Color(0xFF2B74B7) else Color(0xFFB62C92))
-                                .copy(alpha = 0.06f + 0.04f * (sin(phase * 2 + index) + 1f) / 2f),
-                            Color.Transparent)))
-                    }
-                    for (particle in 0..7) {
-                        val x = ((particle * 37 % 101) / 101f) * size.width
-                        val y = (((particle * 19 % 97) / 97f + phase / (2 * PI.toFloat()) * 0.08f) % 1f) * size.height
-                        drawCircle(Color.White.copy(alpha = 0.1f + 0.16f *
-                            (sin(phase * 3 + particle) + 1f) / 2f), 1.dp.toPx(), Offset(x, y))
-                    }
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(Color(0x35E91E78), Color(0x162D4A8C), Color.Transparent),
-                            center = Offset(size.width * 0.82f, size.height * 0.48f),
-                            radius = size.height * 0.95f
-                        ),
-                        radius = size.height * 0.95f,
-                        center = Offset(size.width * 0.82f, size.height * 0.48f)
-                    )
-                }
-                .padding(horizontal = 28.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(0.64f),
-                verticalArrangement = Arrangement.spacedBy(9.dp)
-            ) {
-                Text("SEU KARAOKÊ", fontSize = 9.sp, letterSpacing = 2.sp,
-                    color = TextMuted, modifier = Modifier.clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFF291725)).padding(horizontal = 10.dp, vertical = 5.dp))
-                Text(
-                    text = "Escolha sua música.\nPegue o microfone.",
-                    fontSize = 26.sp,
-                    lineHeight = 30.sp,
-                    letterSpacing = (-0.72).sp,
-                    fontFamily = ReferenceHeadingFont,
-                    fontWeight = FontWeight.Black,
-                    color = TextWhite
-                )
-                Text(
-                    text = "Solte a voz.",
-                    fontSize = 26.sp,
-                    lineHeight = 30.sp,
-                    letterSpacing = (-0.72).sp,
-                    
-                    fontFamily = ReferenceHeadingFont,
-                    fontWeight = FontWeight.Black,
-                    color = GoldPrimary
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HeroActionButton(
-                        label = "Começar a cantar",
-                        primary = true,
-                        onClick = onCantarAgora
-                    )
-                    HeroActionButton(
-                        label = "Ver a fila",
-                        primary = false,
-                        onClick = onGoToQueue
-                    )
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.36f)
-                    .fillMaxHeight()
-                    .drawBehind {
-                        val phase = stagePhase.value
-                        val center = Offset(size.width / 2, size.height * 0.5f)
-                        val radius = size.minDimension * 0.35f
-                        drawCircle(Brush.radialGradient(listOf(GoldPrimary.copy(alpha =
-                            0.12f + 0.08f * (sin(phase * 6) + 1f) / 2f), Color.Transparent),
-                            center = center, radius = radius * 1.25f), radius * 1.25f, center)
-                        for (ring in 0..3) {
-                            drawCircle(Color(0x253E344B), radius + ring * 3.dp.toPx() +
-                                sin(phase * 6 - ring * 0.2f) * 1.5.dp.toPx(), center,
-                                style = Stroke(1.dp.toPx()))
-                        }
-                        for (bar in 0..23) {
-                            val height = (5f + (sin(phase * (12 + bar % 7) + bar * 1.9f) + 1f) *
-                                (9 + (bar * 17 % 15))).dp.toPx()
-                            drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF9F6CEE), GoldPrimary)),
-                                topLeft = Offset(size.width * 0.12f + bar * size.width * 0.032f,
-                                    size.height * 0.9f - height),
-                                size = androidx.compose.ui.geometry.Size(3.dp.toPx(), height),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier.size(190.dp).clip(CircleShape)
-                        .border(1.dp, Color(0x18FF2D96), CircleShape),
-                    contentAlignment = Alignment.Center
+    val dashboardMusics = remember(musics) { musics.take(30) }
+    var selectedCode by rememberSaveable { mutableStateOf<String?>(null) }
+    val selected = dashboardMusics.firstOrNull { it.code == selectedCode } ?: dashboardMusics.firstOrNull()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("SEU PALCO · CATÁLOGO LOCAL", color = TextMuted, fontSize = 10.sp, letterSpacing = 2.sp)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 12.dp, horizontal = 8.dp)) {
+            items(dashboardMusics, key = { it.code }) { song ->
+                val interaction = remember { MutableInteractionSource() }
+                val focused by interaction.collectIsFocusedAsState()
+                val scale by animateFloatAsState(if (focused) 1.06f else if (selected?.code == song.code) 1f else .9f,
+                    animationSpec = tween(150), label = "coverScale")
+                Box(Modifier.size(170.dp)
+                    .then(if (selected?.code == song.code) Modifier.focusRequester(selectedCoverFocusRequester) else Modifier)
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .onFocusChanged { if (it.isFocused) selectedCode = song.code }
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(if (focused || selected?.code == song.code) 2.dp else 1.dp,
+                        if (focused || selected?.code == song.code) GoldPrimary else DarkCardBorder, RoundedCornerShape(10.dp))
+                    .clickable(interactionSource = interaction, indication = null) { selectedCode = song.code }
                 ) {
-                    Box(
-                        modifier = Modifier.size(154.dp).clip(CircleShape)
-                            .border(1.dp, Color(0x28FF2D96), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier.size(116.dp).clip(CircleShape)
-                                .background(Color(0xFF09070D))
-                                .border(2.dp, Color(0xAAFF2D96), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MicNone,
-                                contentDescription = "Karaokê",
-                                tint = GoldPrimary,
-                                modifier = Modifier.size(54.dp).graphicsLayer {
-                                    rotationZ = -35f
-                                    val pulse = 1f + sin(stagePhase.value * 6) * 0.025f
-                                    scaleX = pulse
-                                    scaleY = pulse
-                                }
-                            )
-                        }
-                    }
+                    SongAlbumArt(song.code, song.title, song.artist, searchForArtwork = true, modifier = Modifier.fillMaxSize())
                 }
             }
         }
-
-        QuickSearchPill(searchQuery, onSearchQueryChange,
-            modifier = Modifier.fillMaxWidth().height(42.dp))
-
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text("CATÁLOGO", fontSize = 9.sp, letterSpacing = 2.sp, color = GoldPrimary)
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween) {
-                SectionHeader(title = "Músicas disponíveis")
-                PillTabItem("Ver todas", Icons.Default.ArrowForward, false, onClick = onViewAll)
+        selected?.let { song ->
+            Text(song.title, color = TextWhite, fontFamily = ReferenceHeadingFont, fontWeight = FontWeight.Bold,
+                fontSize = 26.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist, color = TextMuted, fontFamily = ReferenceBodyFont, fontSize = 17.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HeroActionButton("Cantar agora", true) { onMusicClick(song) }
+                PillTabItem(if (song.code in favoriteCodes) "Favorita" else "Favoritar",
+                    if (song.code in favoriteCodes) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                    song.code in favoriteCodes, onClick = { onFavorite(song.code) })
+                PillTabItem(if (song.code in queueCodes) "Na fila" else "Adicionar à fila", Icons.Default.QueueMusic,
+                    song.code in queueCodes, onClick = { onQueue(song.code) })
             }
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(bottom = 2.dp)
-            ) {
-                items(dashboardMusics, key = { it.code }) { music ->
-                    SongCardItem(
-                        music = music,
-                        onClick = { onMusicClick(music) }
-                    )
+        }
+        if (recentMusics.isNotEmpty()) {
+            SectionHeader("Tocadas recentemente")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(recentMusics.take(12), key = { "recent_${it.code}" }) { song ->
+                    SongCardItem(song) { onMusicClick(song) }
                 }
             }
         }
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("NO PALCO", fontSize = 9.sp, letterSpacing = 2.sp, color = GoldPrimary)
-            SectionHeader(title = "Artistas do catálogo")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(dashboardArtists, key = { it.key }) { artist ->
-                    val interaction = remember { MutableInteractionSource() }
-                    val focused by interaction.collectIsFocusedAsState()
-                    Column(modifier = Modifier.width(110.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(if (focused) 2.dp else 0.dp,
-                            if (focused) GoldPrimary else Color.Transparent, RoundedCornerShape(12.dp))
-                        .focusable(interactionSource = interaction)
-                        .clickable(interactionSource = interaction, indication = null) { onArtistClick(artist.key) }
-                        .padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Box(Modifier.size(82.dp).clip(CircleShape).background(DarkCardSurface),
-                            contentAlignment = Alignment.Center) {
-                            Text(artist.key.split(' ').filter { it.isNotBlank() }.take(2)
-                                .joinToString("") { it.take(1).uppercase() },
-                                fontFamily = ReferenceHeadingFont, fontSize = 22.sp, color = GoldPrimary)
-                        }
-                        Text(artist.key, fontFamily = ReferenceBodyFont, fontSize = 11.sp,
-                            color = TextWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${artist.value} músicas", fontSize = 10.sp, color = TextMuted)
-                    }
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SectionHeader(title = "Tocadas recentemente")
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(bottom = 2.dp)
-            ) {
-                items(dashboardRecentMusics, key = { "recent_${it.code}" }) { music ->
-                    SongCardItem(
-                        music = music,
-                        onClick = { onMusicClick(music) }
-                    )
-                }
-            }
-        }
-
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeader(title = "Minha fila")
-                QueueSummaryWidget(queueCount = queueCount, onClick = onGoToQueue)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeader("Minha fila")
+                QueueSummaryWidget(queueCount, onGoToQueue)
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeader(title = "Minhas melhores pontuações")
-                MyScoresSummaryWidget(scores = myBestScores.take(4), onClick = onGoToRanking)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeader("Minhas melhores pontuações")
+                MyScoresSummaryWidget(myBestScores.take(4), onGoToRanking)
             }
         }
     }
@@ -1284,7 +998,8 @@ private fun SongSearchView(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFFFFFFFF))
+                .background(DarkCardElevated)
+                .border(1.dp, GoldPrimary.copy(alpha = .35f), RoundedCornerShape(14.dp))
                 .padding(horizontal = 18.dp, vertical = 10.dp)
         ) {
             Row(
@@ -1294,7 +1009,7 @@ private fun SongSearchView(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Buscar",
-                    tint = Color(0xFF666666),
+                    tint = GoldPrimary,
                     modifier = Modifier.size(20.dp)
                 )
 
@@ -1303,7 +1018,7 @@ private fun SongSearchView(
                     onValueChange = onQueryChange,
                     singleLine = true,
                     textStyle = TextStyle(
-                        color = Color(0xFF111111),
+                        color = TextWhite,
                         fontSize = 14.5.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
@@ -1313,7 +1028,7 @@ private fun SongSearchView(
                             Text(
                                 text = "Buscar Música, Artista ou Código...",
                                 fontSize = 14.5.sp,
-                                color = Color(0xFF888888)
+                                color = TextMuted
                             )
                         }
                         innerTextField()
@@ -1795,9 +1510,9 @@ private fun MyScoresScreenView(
         } else {
             // Pódio Top 3 das Melhores Notas do Usuário
             if (myScores.isNotEmpty()) {
-                val first = myScores[0]
-                val second = myScores.getOrNull(1)
-                val third = myScores.getOrNull(2)
+                val first = myScores.podiumEntry(1)
+                val second = myScores.podiumEntry(2)
+                val third = myScores.podiumEntry(3)
 
                 Row(
                     modifier = Modifier

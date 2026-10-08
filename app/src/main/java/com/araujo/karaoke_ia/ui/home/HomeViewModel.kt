@@ -26,7 +26,8 @@ enum class HomeTab {
     PESQUISAR,
     FILA,
     RANKING,
-    FAVORITOS;
+    FAVORITOS,
+    CONFIGURACOES;
 
     companion object {
         val FILTROS = MUSICAS

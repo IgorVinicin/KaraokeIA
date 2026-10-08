@@ -121,6 +121,25 @@ class RemoteQueueServer(
                 return
             }
             val query = parseQuery(path.substringAfter('?', ""))
+            if (route.startsWith("/photo/")) {
+                val name = route.removePrefix("/photo/")
+                val token = name.removeSuffix(".jpg")
+                val file = java.io.File(context.filesDir, "score_exports/$token.jpg")
+                val output = client.getOutputStream()
+                if (!token.matches(Regex("[a-f0-9-]{36}")) || !file.isFile) {
+                    output.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                } else if (name.endsWith(".jpg")) {
+                    val disposition = if (query["download"] == "1") "Content-Disposition: attachment; filename=karaoke-$token.jpg\r\n" else ""
+                    output.write("HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ${file.length()}\r\n${disposition}Cache-Control: no-store\r\nConnection: close\r\n\r\n".toByteArray())
+                    file.inputStream().use { it.copyTo(output) }
+                } else {
+                    val html = """<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sua foto do karaokê</title><style>body{margin:0;padding:24px;background:#0f1017;color:white;font:16px sans-serif;text-align:center}img{display:block;width:100%;max-width:480px;margin:20px auto;border-radius:16px}a{display:inline-block;padding:16px 24px;background:#ed307e;color:white;border-radius:12px;text-decoration:none}p{color:#b9bac6}</style><h1>Sua foto do karaokê</h1><img src="/photo/$token.jpg" alt="Foto com moldura colorida"><a href="/photo/$token.jpg?download=1" download>Baixar minha foto</a><p>Se necessário, mantenha a imagem pressionada para salvá-la.</p></html>""".toByteArray(Charsets.UTF_8)
+                    output.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${html.size}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n".toByteArray())
+                    output.write(html)
+                }
+                output.flush()
+                return
+            }
             val code = query["code"]
             if (route == "/api/artwork") {
                 val music = code?.let { musicRepository.findMusicByCode(it) }

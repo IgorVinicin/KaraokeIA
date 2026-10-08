@@ -2,6 +2,7 @@ package com.araujo.karaoke_ia.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -19,6 +20,11 @@ import com.araujo.karaoke_ia.ui.home.HomeViewModel
 import com.araujo.karaoke_ia.ui.player.PlayerScreen
 import com.araujo.karaoke_ia.ui.player.PlayerViewModel
 import com.araujo.karaoke_ia.ui.score.ScoreScreen
+import androidx.compose.ui.platform.LocalContext
+import com.araujo.karaoke_ia.data.StorageManager
+import com.araujo.karaoke_ia.online.ModeScreen
+import com.araujo.karaoke_ia.online.OnlineRepository
+import com.araujo.karaoke_ia.online.OnlineScreen
 
 sealed class Screen(val route: String) {
     object Home   : Screen("home")
@@ -41,10 +47,23 @@ fun NavGraph(
         artworkRepository: ArtworkRepository,
         remoteUrl: String? = null
 ) {
+    val context = LocalContext.current
+    val onlineRepository = remember { OnlineRepository(context.applicationContext) }
     NavHost(
         navController    = navController,
-        startDestination = Screen.Home.route
+        startDestination = "modes"
     ) {
+        composable("modes") {
+            ModeScreen(onOffline = {
+                navController.navigate(Screen.Home.route)
+                val storage = StorageManager(context)
+                if (!storage.hasAllFilesPermission()) storage.requestAllFilesPermission()
+            }, onOnline = { navController.navigate("online") })
+        }
+        composable("online") {
+            OnlineScreen(onlineRepository, scoreRepository, remoteUrl,
+                onModes = { navController.popBackStack("modes", false) })
+        }
         // ── Home ──────────────────────────────────────────────────────────────
         composable(Screen.Home.route) {
             val homeViewModel: HomeViewModel = viewModel(
@@ -61,7 +80,8 @@ fun NavGraph(
                 onNavigateToPlayer = { code ->
                     navController.navigate(Screen.Player.createRoute(code))
                 },
-                viewModel = homeViewModel
+                viewModel = homeViewModel,
+                onModes = { navController.popBackStack("modes", false) }
             )
         }
 
@@ -107,13 +127,13 @@ fun NavGraph(
             val feedback = backStackEntry.arguments?.getString("feedback") ?: ""
             val scoreEntry = remember(backStackEntry) { scoreRepository.getAllScores().firstOrNull() }
             val rankingPosition = remember(scoreEntry) {
-                scoreRepository.getBestScores().indexOfFirst { it.id == scoreEntry?.id }
-                    .takeIf { it >= 0 }?.plus(1)
+                scoreEntry?.let { scoreRepository.getPodiumPosition(it.id) }
             }
 
             val nextCode = queueRepository.peekNext()
             val nextMusic = nextCode?.let { musicRepository.findMusicByCode(it) }
 
+            key(scoreEntry?.id ?: backStackEntry.id) {
             ScoreScreen(
                 score        = score,
                 feedback     = feedback,
@@ -123,6 +143,7 @@ fun NavGraph(
                 scoredMusic = scoreEntry?.let { musicRepository.findMusicByCode(it.musicCode) },
                 artworkRepository = artworkRepository,
                 onPhotoCaptured = { path -> scoreEntry?.let { scoreRepository.attachPhotoToScore(it.id, path) } },
+                remoteUrl = remoteUrl,
                 onPlayNext   = { codeToPlay ->
                     queueRepository.popNext()
                     navController.navigate(Screen.Player.createRoute(codeToPlay)) {
@@ -135,6 +156,7 @@ fun NavGraph(
                     }
                 }
             )
+            }
         }
     }
 }

@@ -13,12 +13,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             setProguardFiles(listOf(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"))
         }
     }
@@ -54,7 +54,8 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.tv.material)
     implementation(libs.coil.compose)
-    implementation("com.google.zxing:core:3.5.3")
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.zxing.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

@@ -13,3 +13,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+.env
+.env.*
+!.env.example
+/emulador-*.log
+/instalacao-crash.log
+/reports/finalization/redesign-probe/baseline/
+/reports/finalization/redesign-probe/*.class
+/Microsoft/Windows/PowerShell/ModuleAnalysisCache

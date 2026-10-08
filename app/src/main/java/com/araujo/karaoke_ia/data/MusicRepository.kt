@@ -1,5 +1,6 @@
 package com.araujo.karaoke_ia.data
 
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
 
@@ -25,13 +26,15 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
         val cleanCode = code.trim()
         if (cleanCode.isBlank()) return null
 
-        // 1. Tenta encontrar no cache da memória primeiro
-        cachedByCode[cleanCode.trimStart('0').ifEmpty { "0" }]?.let {
-            return it
+        val rootPath = storageManager.refreshRootPath()
+        // A troca do pendrive invalida o caminho dos vídeos em memória.
+        if (cachedRootPath == rootPath) {
+            cachedByCode[cleanCode.trimStart('0').ifEmpty { "0" }]?.takeIf {
+                it.videoPath?.let { path -> File(path).isFile } == true
+            }?.let { return it }
         }
 
         // 2. Busca direto no disco
-        val rootPath = storageManager.refreshRootPath()
         val rootDir = File(rootPath)
         if (!rootDir.exists() || !rootDir.isDirectory) return null
         val metadataDir = File(rootDir, "dados").takeIf { it.isDirectory } ?: rootDir
@@ -82,7 +85,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("MusicRepository", "Falha ao ler o catálogo local", e)
         }
 
         val sorted = result.sortedBy { it.title.lowercase() }
@@ -133,7 +136,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
                 videoPath   = mp4File.absolutePath
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("MusicRepository", "Metadados inválidos para a música $code", e)
             null
         }
     }
