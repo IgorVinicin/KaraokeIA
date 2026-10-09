@@ -213,7 +213,7 @@ class RemoteQueueServer(
         }
 
     private fun songsJson(): String {
-        val songs = musicRepository.scanAllMusics()
+        val songs = musicRepository.loadCachedCatalog().filter { it.available }
         return songs.joinToString(prefix = "[", postfix = "]") { music ->
             "{\"code\":\"${jsonEscape(music.code)}\",\"title\":\"${jsonEscape(music.title)}\",\"artist\":\"${jsonEscape(music.artist)}\"}"
         }

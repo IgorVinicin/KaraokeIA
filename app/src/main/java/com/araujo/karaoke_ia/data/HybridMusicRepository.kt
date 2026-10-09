@@ -15,6 +15,9 @@ class HybridMusicRepository(private val local: MusicRepository, private val onli
         songs.forEach { searchResults[it.code] = it }
     }
     override fun scanAllMusics(forceRefresh: Boolean) = local.scanAllMusics(forceRefresh)
+    override fun loadCachedCatalog() = local.loadCachedCatalog()
+    override fun searchLocal(query: String, limit: Int, offset: Int) = local.searchLocal(query, limit, offset)
+    override val catalogUpdates get() = local.catalogUpdates
     override fun findMusicByCode(code: String): MusicFile? {
         if (!code.startsWith("youtube:")) return local.findMusicByCode(code)
         if (!OnlineRepository.validId(code.removePrefix("youtube:"))) return null

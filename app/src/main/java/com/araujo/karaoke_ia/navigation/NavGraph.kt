@@ -7,6 +7,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -41,7 +43,7 @@ import kotlinx.coroutines.withContext
 sealed class Screen(val route: String) {
     object Home   : Screen("home")
     object Player : Screen("player/{musicCode}") {
-        fun createRoute(musicCode: String) = "player/$musicCode"
+        fun createRoute(musicCode: String) = "player/${Uri.encode(musicCode)}"
     }
     object Score  : Screen("score/{score}/{feedback}") {
         fun createRoute(score: Int, feedback: String) = "score/$score/$feedback"
@@ -58,7 +60,8 @@ fun NavGraph(
     queueRepository: QueueRepository,
         scoreRepository: ScoreRepository,
         artworkRepository: ArtworkRepository,
-        remoteUrl: String? = null
+        remoteUrl: String? = null,
+        storageRevision: Int = 0
 ) {
     val context = LocalContext.current
     fun playSong(code: String) {
@@ -100,6 +103,9 @@ fun NavGraph(
                     onlineRepository = onlineRepository
                 )
             )
+            LaunchedEffect(storageRevision) {
+                homeViewModel.onStorageChanged(storageRevision)
+            }
             HomeScreen(
                 onNavigateToPlayer = { code ->
                     if (homeViewModel.prepareSong(code)) playSong(code)

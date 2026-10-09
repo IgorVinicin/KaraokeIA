@@ -53,11 +53,11 @@ class HybridLibraryTest {
         while (!condition() && android.os.SystemClock.elapsedRealtime() < deadline) android.os.SystemClock.sleep(20)
         assertTrue("State did not settle", condition())
     }
-    private fun viewModel(search: HybridSongSearch): HomeViewModel {
+    private fun viewModel(search: HybridSongSearch, localRepository: MusicRepository = local()): HomeViewModel {
         lateinit var vm: HomeViewModel
         main {
             val online = OnlineRepository(context)
-            vm = HomeViewModel(HybridMusicRepository(local(), online), FavoritesRepository(context),
+            vm = HomeViewModel(HybridMusicRepository(localRepository, online), FavoritesRepository(context),
                 HistoryRepository(context), QueueRepository(context), ScoreRepository(context),
                 ArtworkRepository(context), online, search)
             ViewModelProvider(store, object : ViewModelProvider.Factory {
@@ -67,6 +67,28 @@ class HybridLibraryTest {
         }
         waitFor { !vm.isLoading.value }
         return vm
+    }
+
+    @Test fun cachedHomeAndSearchRemainResponsiveWhileUsbRefreshIsBlocked() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val indexed = object : MusicRepository {
+            override fun loadCachedCatalog() = listOf(localSong)
+            override fun scanAllMusics(forceRefresh: Boolean): List<MusicFile> {
+                started.countDown()
+                release.await(15, java.util.concurrent.TimeUnit.SECONDS)
+                return listOf(localSong)
+            }
+            override fun findMusicByCode(code: String) = localSong.takeIf { it.code == code }
+        }
+        try {
+            val vm = viewModel(HybridSongSearch { error("Local results must not need internet") }, indexed)
+            assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(listOf(localSong), vm.allMusics.value)
+            assertFalse(vm.isLoading.value)
+            main { vm.onSearchQueryChange("evidencias") }
+            waitFor { vm.filteredMusics.value == listOf(localSong) && !vm.isSearching.value }
+        } finally { release.countDown() }
     }
 
     @Test fun lateYoutubeResponseCannotReplaceNewerLocalResults() {

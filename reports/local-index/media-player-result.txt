@@ -1,0 +1,3 @@
+Command: node reports/local-index/media-player.test.cjs
+Result: PASS iframe: ready, buffering, playing, paused, ended, autoplayBlocked, error; origin, autoplay and resize
+Scope: Actual embedded JavaScript with a mock of the official iframe API. No network, Android WebView, codec or hardware measurements.

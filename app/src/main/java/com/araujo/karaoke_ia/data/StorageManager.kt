@@ -16,7 +16,7 @@ import androidx.core.content.ContextCompat
 class StorageManager(private val context: Context) {
 
     val catalogCacheFile: File
-        get() = File(context.applicationContext.cacheDir, "local_catalog_v1.json")
+        get() = File(context.applicationContext.noBackupFilesDir, "local_music_index.sqlite")
 
     var rootPath: String?
         get() = context.getSharedPreferences("storage_prefs", Context.MODE_PRIVATE)
@@ -60,7 +60,10 @@ class StorageManager(private val context: Context) {
 
     fun isPathValid(path: String): Boolean {
         val file = File(path)
-        return file.exists() && file.isDirectory
+        val state = runCatching { Environment.getExternalStorageState(file) }.getOrNull()
+        if (state in setOf(Environment.MEDIA_UNMOUNTED, Environment.MEDIA_REMOVED, Environment.MEDIA_BAD_REMOVAL,
+                Environment.MEDIA_UNMOUNTABLE, Environment.MEDIA_CHECKING, Environment.MEDIA_NOFS)) return false
+        return file.isDirectory
     }
 
     fun findExternalStoragePath(): String {
@@ -99,9 +102,23 @@ class StorageManager(private val context: Context) {
     }
 
     fun refreshRootPath(): String {
+        rootPath?.takeIf { isPathValid(it) }?.let { return it }
         val detectedPath = findExternalStoragePath()
         if (rootPath != detectedPath) rootPath = detectedPath
         return detectedPath
+    }
+
+    /** Index each connected volume, while retaining rows for volumes absent from this list. */
+    fun catalogRoots(): List<String> {
+        val internal = Environment.getExternalStorageDirectory().absolutePath
+        val candidates = mutableListOf<File>()
+        rootPath?.let { candidates.add(File(it)) }
+        listOf("Download/karaoke", "Download/KARAOKE", "karaoke", "KARAOKE", "Download/MUSICAS", "MUSICAS", "musicas", "Music")
+            .mapTo(candidates) { File(internal, it) }
+        File("/storage").listFiles()?.filter { it.isDirectory && it.name !in setOf("emulated", "self") }
+            ?.forEach { candidates.add(findKaraokeDirectory(it) ?: it) }
+        val paths = candidates.filter { isPathValid(it.absolutePath) }.map { it.absolutePath }.distinct()
+        return paths.filter { path -> paths.none { other -> other != path && path.startsWith("$other/") } }
     }
 
     private fun findKaraokeDirectory(parent: File): File? {

@@ -1,0 +1,17 @@
+{
+  "scope": "Production SQL extracted from MusicRepository.kt, executed with host Python SQLite; Android and TV hardware not executed",
+  "source": "app\\src\\main\\java\\com\\araujo\\karaoke_ia\\data\\MusicRepository.kt",
+  "source_sha256": "ce4d0b464ad73e92ffbdf4093feccc50db097fa35343f7c0f2285454025515b8",
+  "host_sqlite_version": "3.50.4",
+  "tests_run": 7,
+  "failures": 0,
+  "errors": 0,
+  "schema_statements": [
+    "CREATE TABLE IF NOT EXISTS songs (path TEXT PRIMARY KEY, root TEXT NOT NULL, code TEXT NOT NULL, code_key TEXT NOT NULL, file_name TEXT NOT NULL, artist TEXT NOT NULL, title TEXT NOT NULL, lyrics TEXT NOT NULL, duration INTEGER, signature TEXT NOT NULL, video_signature TEXT NOT NULL, search_text TEXT NOT NULL, available INTEGER NOT NULL, seen INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS songs_root ON songs(root)",
+    "CREATE INDEX IF NOT EXISTS songs_code ON songs(code_key, available)",
+    "CREATE INDEX IF NOT EXISTS songs_title ON songs(title, path)"
+  ],
+  "search_statement": "SELECT * FROM songs s WHERE path = (SELECT path FROM songs other WHERE other.code_key = s.code_key ORDER BY available DESC, path LIMIT 1) AND search_text LIKE ? ESCAPE '\\' ORDER BY title COLLATE NOCASE, path LIMIT ? OFFSET ?",
+  "output": "test_connected_duplicate_selection_is_deterministic (__main__.RepositorySqlTest.test_connected_duplicate_selection_is_deterministic) ... ok\ntest_disconnected_catalogue_remains_searchable_with_original_path (__main__.RepositorySqlTest.test_disconnected_catalogue_remains_searchable_with_original_path) ... ok\ntest_duplicate_codes_choose_connected_volume_before_pagination (__main__.RepositorySqlTest.test_duplicate_codes_choose_connected_volume_before_pagination) ... ok\ntest_extracted_escape_replacements_treat_wildcards_literally (__main__.RepositorySqlTest.test_extracted_escape_replacements_treat_wildcards_literally) ... ok\ntest_normalized_title_artist_and_code_parameters (__main__.RepositorySqlTest.test_normalized_title_artist_and_code_parameters) ... ok\ntest_pagination_has_stable_nonoverlapping_results (__main__.RepositorySqlTest.test_pagination_has_stable_nonoverlapping_results) ... ok\ntest_schema_and_column_positions_match_cursor_contract (__main__.RepositorySqlTest.test_schema_and_column_positions_match_cursor_contract) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.030s\n\nOK\n"
+}

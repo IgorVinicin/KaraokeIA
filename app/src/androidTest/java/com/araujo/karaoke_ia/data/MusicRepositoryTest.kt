@@ -48,7 +48,11 @@ class MusicRepositoryTest {
         repository().scanAllMusics()
         cache.writeText("{interrompido")
         assertEquals("Primeira", repository().scanAllMusics().single().title)
-        assertTrue(cache.readText().contains("signature"))
+        assertEquals("SQLite format 3", cache.inputStream().use { input ->
+            val header = ByteArray(15)
+            input.read(header)
+            String(header, Charsets.US_ASCII)
+        })
     }
 
     @Test fun changingUsbRootDoesNotReuseAnotherDrivesCache() {
@@ -60,8 +64,12 @@ class MusicRepositoryTest {
         File(second, "00001.mp4").writeBytes(byteArrayOf(0))
         File(second, "00001.txt").writeText("""{"musica":"Segundo disco","artista":"Cantor"}""")
         activeRoot = second.absolutePath
-        assertEquals("Segundo disco", repo.scanAllMusics().single().title)
+        val catalogue = repo.scanAllMusics()
+        assertEquals("Segundo disco", catalogue.single().title)
+        assertTrue(catalogue.single().available)
         assertEquals(File(second, "00001.mp4").absolutePath, repo.findMusicByCode("1")?.videoPath)
+        activeRoot = root.absolutePath
+        assertEquals("Primeiro disco", repo.scanAllMusics().single().title)
     }
 
     @Test fun forceRefreshReparsesMetadataEvenIfSizeAndTimestampAreUnchanged() {

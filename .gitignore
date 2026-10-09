@@ -35,6 +35,10 @@ local.properties
 !/dist/SoltaVoz-debug.apk
 !/dist/SoltaVoz-debug.apk.sha256
 !/dist/SoltaVoz-debug.sha256
+!/dist/SoltaVoz-1.4.0-debug.apk
+!/dist/SoltaVoz-1.4.0-debug.apk.sha256
+!/dist/TESTAR-SOLTAVOZ-1.4.md
+/admin-web/local-server*.log
 /release-*.log
 /build-solta-voz.log
 /supabase/.temp/

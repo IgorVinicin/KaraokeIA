@@ -60,6 +60,8 @@ import com.araujo.karaoke_ia.ui.components.MusicArtwork
 import com.araujo.karaoke_ia.ui.components.stageBackground
 import com.araujo.karaoke_ia.ui.components.tvFocusFeedback
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -179,7 +181,9 @@ fun PlayerScreen(
 
     val playPauseFocusRequester = remember { FocusRequester() }
     val playbackRetryFocusRequester = remember { FocusRequester() }
-    val remoteQr = remember(remoteUrl) { remoteUrl?.let { QrCodeGenerator.createBitmap(it) } }
+    val remoteQr by produceState<android.graphics.Bitmap?>(null, remoteUrl) {
+        value = withContext(Dispatchers.Default) { remoteUrl?.let { QrCodeGenerator.createBitmap(it) } }
+    }
 
     BackHandler {
         exoPlayer.stop()
@@ -226,8 +230,8 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(showControls, lastInteractionTime) {
-        if (showControls) {
+    LaunchedEffect(showControls, lastInteractionTime, isPlaying, playbackError) {
+        if (showControls && isPlaying && playbackError == null) {
             delay(4000)
             showControls = false
         }
@@ -236,6 +240,7 @@ fun PlayerScreen(
     // Request focus after AnimatedVisibility has composed the controls.
     LaunchedEffect(showControls, playbackError, isTv) {
         if (isTv && showControls && playbackError == null) {
+            withFrameNanos { }
             playPauseFocusRequester.requestFocus()
         }
     }
@@ -314,13 +319,14 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (remoteQr != null) {
+        val qrBitmap = remoteQr
+        if (qrBitmap != null) {
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 androidx.compose.foundation.Image(
-                    bitmap = remoteQr.asImageBitmap(),
+                    bitmap = qrBitmap.asImageBitmap(),
                     contentDescription = "Controle remoto",
                     modifier = Modifier.size(if (isTv) 120.dp else 64.dp).clip(RoundedCornerShape(8.dp))
                 )

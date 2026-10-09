@@ -1,5 +1,21 @@
 # Continuidade do SoltaVoz — 09/10/2026
 
+## Atualização 1.4 — indexação local
+
+Implementada indexação SQLite persistente, busca local paginada e normalizada,
+verificação incremental em segundo plano e retenção de catálogos desconectados.
+APK desta atualização: `dist/SoltaVoz-1.4.0-debug.apk`, versionCode 6.
+Build final passou, lint com zero erros e 50 avisos. Passaram 26 testes de
+servidor/API, sete testes SQL no computador e a simulação de eventos YouTube.
+Resultado consolidado: `reports/local-index/validation.json`.
+Melhorias de foco D-pad e estados do player também estão incluídas.
+Detalhes em [soltavoz-1.4.md](soltavoz-1.4.md).
+
+Não iniciar emuladores neste PC: o usuário pediu para pular essas etapas.
+Os testes Android e o benchmark estão preparados, mas não foram executados
+nesta atualização. A validação em TV box físico continua pendente.
+O estado 1.3 abaixo registra a entrega anterior, não os resultados da 1.4.
+
 ## Estado entregue
 
 - SoltaVoz 1.3.0, versionCode 5. APK de teste em `dist/SoltaVoz-debug.apk`.

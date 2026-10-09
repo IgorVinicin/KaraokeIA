@@ -216,6 +216,7 @@ class OnlineRepository(context: Context, private val access: AccessRepository? =
         songs
     }
     private fun request(url: String): JSONObject {
+        val startedAt = SystemClock.elapsedRealtime()
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 10000
@@ -230,9 +231,15 @@ class OnlineRepository(context: Context, private val access: AccessRepository? =
                 else -> "YouTube indisponível agora. Tente novamente."
             })
             return connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
+        } catch (_: java.net.SocketTimeoutException) {
+            throw IllegalStateException("O YouTube demorou para responder. Tente novamente.")
         } catch (_: java.io.IOException) {
             throw IllegalStateException("Não foi possível conectar ao YouTube. Confira sua internet.")
-        } finally { connection.disconnect() }
+        } finally {
+            // No keys, search text or URLs enter diagnostics.
+            android.util.Log.d("SoltaVozMedia", "youtube_request_ms=${SystemClock.elapsedRealtime() - startedAt}")
+            connection.disconnect()
+        }
     }
     companion object {
         private const val MAX_QUEUE_SIZE = 100

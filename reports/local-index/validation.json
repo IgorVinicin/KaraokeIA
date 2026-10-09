@@ -1,0 +1,19 @@
+﻿{
+    "version":  "1.4.0",
+    "versionCode":  6,
+    "apk":  "dist/SoltaVoz-1.4.0-debug.apk",
+    "sha256":  "cb46611bbc86cf7fa5e574b3a10808dcb8f0317b9cb3f664e70f5b99c29e162a",
+    "build":  "SUCCESS",
+    "buildLog":  "reports/local-index-build-delivery.log",
+    "lintErrors":  0,
+    "lintWarnings":  50,
+    "serverTestsPassed":  26,
+    "hostSqlTestsPassed":  7,
+    "youtubeJavascriptMock":  "PASS",
+    "signature":  "verified",
+    "localSecretsCheck":  "PASS",
+    "androidTests":  "compiled, not executed",
+    "benchmark":  "not executed",
+    "reason":  "User requested skipping emulators due to PC capacity",
+    "tvBoxTests":  "pending"
+}

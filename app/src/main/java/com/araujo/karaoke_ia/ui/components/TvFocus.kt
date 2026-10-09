@@ -11,6 +11,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import com.araujo.karaoke_ia.ui.theme.GoldAccent
 
 /** A single focus observer, placed before the clickable/button's focus target.
  * Animates only during interaction; idle screens have no animation loop. */
@@ -18,7 +19,13 @@ fun Modifier.tvFocusFeedback(): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.035f else 1f, tween(130), label = "tvFocus")
     onFocusChanged { focused = it.hasFocus }
-        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .graphicsLayer {
+            scaleX = scale; scaleY = scale
+            shape = RoundedCornerShape(10.dp)
+            shadowElevation = if (focused) 6.dp.toPx() else 0f
+            ambientShadowColor = GoldAccent
+            spotShadowColor = GoldAccent
+        }
         .border(if (focused) 3.dp else 0.dp,
-            if (focused) Color.White else Color.Transparent, RoundedCornerShape(10.dp))
+            if (focused) GoldAccent else Color.Transparent, RoundedCornerShape(10.dp))
 }

@@ -233,6 +233,10 @@ fun HomeScreen(
 
             )
 
+            if (viewModel.isIndexing.value) {
+                Text("Verificando músicas locais…", color = TextMuted, fontSize = 12.sp)
+                androidx.compose.material3.LinearProgressIndicator(color = GoldAccent, modifier = Modifier.fillMaxWidth().height(2.dp))
+            }
             Spacer(modifier = Modifier.height(14.dp))
 
             // ── 3. Visualização da Aba ───────────────────────────────────────
@@ -267,7 +271,7 @@ fun HomeScreen(
                         )
                     }
 
-                    isLoading -> {
+                    isLoading && allMusics.isEmpty() && historyMusics.isEmpty() -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             androidx.compose.material3.CircularProgressIndicator(color = GoldPrimary)
                         }
@@ -311,6 +315,8 @@ fun HomeScreen(
                             query = searchQuery,
                             searchStatus = viewModel.searchStatus.value,
                             isSearching = viewModel.isSearching.value,
+                            hasMoreResults = viewModel.hasMoreSearchResults.value,
+                            onLoadMore = { viewModel.loadMoreSearchResults() },
                             onRetrySearch = { viewModel.onSearchQueryChange(searchQuery) },
                             onSearchSettings = { viewModel.onTabSelected(HomeTab.CONFIGURACOES) },
                             onQueryChange = { viewModel.onSearchQueryChange(it) },
@@ -539,7 +545,7 @@ private fun HomeDashboardView(
                     .clip(RoundedCornerShape(10.dp))
                     .border(if (focused || selected?.code == song.code) 2.dp else 1.dp,
                         if (focused || selected?.code == song.code) GoldPrimary else DarkCardBorder, RoundedCornerShape(10.dp))
-                    .clickable(interactionSource = interaction, indication = null) { selectedCode = song.code; onMusicClick(song) }
+                    .clickable(interactionSource = interaction, indication = null) { selectedCode = song.code; if (song.available) onMusicClick(song) }
                 ) {
                     SongAlbumArt(song.code, song.title, song.artist, searchForArtwork = false, modifier = Modifier.fillMaxSize())
                 }
@@ -551,12 +557,12 @@ private fun HomeDashboardView(
             Text("${song.artist} · ${song.sourceLabel}", color = TextMuted, fontFamily = ReferenceBodyFont, fontSize = 17.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HeroActionButton("Cantar agora", true) { onMusicClick(song) }
+                HeroActionButton(if (song.available) "Cantar agora" else "Armazenamento desconectado", true, enabled = song.available) { onMusicClick(song) }
                 PillTabItem(if (song.code in favoriteCodes) "Favorita" else "Favoritar",
                     if (song.code in favoriteCodes) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     song.code in favoriteCodes, onClick = { onFavorite(song.code) })
                 PillTabItem(if (song.code in queueCodes) "Na fila" else "Adicionar à fila", Icons.Default.QueueMusic,
-                    song.code in queueCodes, onClick = { onQueue(song.code) })
+                    song.code in queueCodes, onClick = { if (song.available) onQueue(song.code) })
             }
         }
         if (recentMusics.isNotEmpty()) {
@@ -575,11 +581,12 @@ private fun HomeDashboardView(
 private fun HeroActionButton(
     label: String,
     primary: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    val highlighted = primary || isFocused
+    val highlighted = enabled && (primary || isFocused)
 
     Row(
         modifier = Modifier
@@ -594,7 +601,7 @@ private fun HeroActionButton(
                 color = if (highlighted) GoldGlow else Color(0x55FFFFFF),
                 shape = RoundedCornerShape(24.dp)
             )
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 15.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -635,10 +642,11 @@ private fun PaginationControls(
     page: Int,
     totalItems: Int,
     onPrevious: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    hasMore: Boolean = false
 ) {
     val pageCount = (totalItems + MUSIC_PAGE_SIZE - 1) / MUSIC_PAGE_SIZE
-    if (pageCount <= 1) return
+    if (pageCount <= 1 && !hasMore) return
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -652,7 +660,7 @@ private fun PaginationControls(
             fontSize = 12.sp,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        PaginationButton("Próxima", page < pageCount - 1, onNext)
+        PaginationButton("Próxima", page < pageCount - 1 || hasMore, onNext)
     }
 }
 
@@ -687,7 +695,7 @@ private fun SongCardItem(
         modifier = Modifier
             .width(135.dp)
             .tvFocusFeedback()
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
+            .clickable(interactionSource = interactionSource, indication = null, enabled = music.available) { onClick() },
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Box(
@@ -815,6 +823,8 @@ private fun SongSearchView(
     query: String,
     searchStatus: String?,
     isSearching: Boolean,
+    hasMoreResults: Boolean,
+    onLoadMore: () -> Unit,
     onRetrySearch: () -> Unit,
     onSearchSettings: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -827,8 +837,17 @@ private fun SongSearchView(
     onQueue: (String) -> Unit,
     onFavorite: (String) -> Unit
 ) {
-    var page by remember { mutableIntStateOf(0) }
-    LaunchedEffect(results) { page = 0 }
+    var page by rememberSaveable(query) { mutableIntStateOf(0) }
+    LaunchedEffect(results.size) { page = page.coerceIn(0, ((results.size - 1) / MUSIC_PAGE_SIZE).coerceAtLeast(0)) }
+    var searchFocused by remember { mutableStateOf(false) }
+    var awaitingNextPage by remember(query) { mutableStateOf(false) }
+    LaunchedEffect(results.size, hasMoreResults, isSearching) {
+        if (awaitingNextPage && (page + 1) * MUSIC_PAGE_SIZE < results.size &&
+            ((page + 2) * MUSIC_PAGE_SIZE <= results.size || !hasMoreResults)) {
+            page += 1
+            awaitingNextPage = false
+        } else if (!isSearching && !hasMoreResults) awaitingNextPage = false
+    }
     val pageResults = remember(results, page) {
         results.drop(page * MUSIC_PAGE_SIZE).take(MUSIC_PAGE_SIZE)
     }
@@ -840,9 +859,11 @@ private fun SongSearchView(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .onFocusChanged { searchFocused = it.hasFocus }
                 .clip(RoundedCornerShape(14.dp))
                 .background(DarkCardElevated)
-                .border(1.dp, GoldPrimary.copy(alpha = .35f), RoundedCornerShape(14.dp))
+                .border(if (searchFocused) 3.dp else 1.dp,
+                    if (searchFocused) GoldAccent else GoldPrimary.copy(alpha = .35f), RoundedCornerShape(14.dp))
                 .padding(horizontal = 18.dp, vertical = 10.dp)
         ) {
             Row(
@@ -878,6 +899,11 @@ private fun SongSearchView(
                     },
                     modifier = Modifier.weight(1f).tvSearchFocusNavigation()
                 )
+                if (query.isNotEmpty()) {
+                    androidx.compose.material3.IconButton(
+                        onClick = { onQueryChange("") }, modifier = Modifier.tvFocusFeedback()
+                    ) { Icon(Icons.Default.Close, contentDescription = "Limpar busca", tint = TextWhite) }
+                }
             }
         }
 
@@ -916,7 +942,7 @@ private fun SongSearchView(
                     isSelected = featuredMusic?.code == music.code,
                     onSelect = { onSelectMusic(music) },
                     onCantar = { onCantar(music.code) },
-                    onQueue = { onQueue(music.code) }
+                    onQueue = { if (music.available) onQueue(music.code) }
                 )
             }
         }
@@ -924,9 +950,15 @@ private fun SongSearchView(
         PaginationControls(
             page = page,
             totalItems = results.size,
+            hasMore = hasMoreResults,
             onPrevious = { page = (page - 1).coerceAtLeast(0) },
             onNext = {
-                page = (page + 1).coerceAtMost((results.size - 1) / MUSIC_PAGE_SIZE)
+                if ((page + 1) * MUSIC_PAGE_SIZE < results.size &&
+                    ((page + 2) * MUSIC_PAGE_SIZE <= results.size || !hasMoreResults)) page += 1
+                else if (hasMoreResults && !isSearching) {
+                    awaitingNextPage = true
+                    onLoadMore()
+                }
             }
         )
     }
@@ -1020,7 +1052,7 @@ private fun FeaturedSearchCard(
                             color = if (isQueueFocused) GoldGlow else BronzeBorder,
                             shape = RoundedCornerShape(12.dp)
                         )
-                        .clickable(interactionSource = queueInteraction, indication = null) { onQueue() }
+                        .clickable(interactionSource = queueInteraction, indication = null, enabled = music.available) { onQueue() }
                         .padding(horizontal = 14.dp, vertical = 9.dp)
                 ) {
                     Text(
@@ -1044,7 +1076,7 @@ private fun FeaturedSearchCard(
                             color = GoldGlow,
                             shape = RoundedCornerShape(12.dp)
                         )
-                        .clickable(interactionSource = cantarInteraction, indication = null) { onCantar() }
+                        .clickable(interactionSource = cantarInteraction, indication = null, enabled = music.available) { onCantar() }
                         .padding(horizontal = 18.dp, vertical = 9.dp)
                 ) {
                     Row(
@@ -1097,7 +1129,7 @@ private fun SearchResultItem(
                 shape = RoundedCornerShape(12.dp)
             )
                         .onFocusChanged { if (it.isFocused) onSelect() }
-            .clickable(interactionSource = interactionSource, indication = null) { onCantar() }
+            .clickable(interactionSource = interactionSource, indication = null, enabled = music.available) { onCantar() }
             .padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1162,6 +1194,7 @@ private fun SearchResultItem(
 
             IconButton(
                 onClick = onCantar,
+                enabled = music.available,
                 modifier = Modifier.tvFocusFeedback().size(36.dp)
             ) {
                 Icon(
@@ -1541,8 +1574,8 @@ private fun FavoritesScreenView(
     onQueue: (String) -> Unit,
     onToggleFavorite: (String) -> Unit
 ) {
-    var page by remember { mutableIntStateOf(0) }
-    LaunchedEffect(favorites) { page = 0 }
+    var page by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(favorites.size) { page = page.coerceIn(0, ((favorites.size - 1) / MUSIC_PAGE_SIZE).coerceAtLeast(0)) }
     val pageFavorites = remember(favorites, page) {
         favorites.drop(page * MUSIC_PAGE_SIZE).take(MUSIC_PAGE_SIZE)
     }
@@ -1588,7 +1621,7 @@ private fun FavoritesScreenView(
                         music = music,
                         isInQueue = queueCodes.contains(music.code),
                         onCantar = { onCantar(music.code) },
-                        onQueue = { onQueue(music.code) },
+                        onQueue = { if (music.available) onQueue(music.code) },
                         onRemoveFavorite = { onToggleFavorite(music.code) }
                     )
                 }
@@ -1627,7 +1660,7 @@ private fun FavoriteGridCard(
                 color = if (isFocused) GoldPrimary else DarkCardBorder,
                 shape = RoundedCornerShape(14.dp)
             )
-            .clickable(onClick = onCantar)
+            .clickable(enabled = music.available, onClick = onCantar)
             .padding(9.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1693,7 +1726,7 @@ private fun FavoriteGridCard(
                             .tvFocusFeedback()
                             .clip(RoundedCornerShape(8.dp))
                             .background(GoldPrimary)
-                            .clickable { onCantar() }
+                            .clickable(enabled = music.available) { onCantar() }
                             .padding(vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1706,7 +1739,7 @@ private fun FavoriteGridCard(
                             .tvFocusFeedback()
                             .clip(RoundedCornerShape(8.dp))
                             .background(BronzeGradient1)
-                            .clickable { onQueue() }
+                            .clickable(enabled = music.available) { onQueue() }
                             .padding(vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1732,7 +1765,8 @@ private fun CatalogView(
     artworkBatchProgress: ArtworkBatchProgress?,
     onFetchArtwork: () -> Unit
 ) {
-    var page by remember(selectedArtist) { mutableIntStateOf(0) }
+    var page by rememberSaveable(selectedArtist) { mutableIntStateOf(0) }
+    LaunchedEffect(musics.size) { page = page.coerceIn(0, ((musics.size - 1) / MUSIC_PAGE_SIZE).coerceAtLeast(0)) }
     val pageMusics = remember(musics, page) {
         musics.drop(page * MUSIC_PAGE_SIZE).take(MUSIC_PAGE_SIZE)
     }

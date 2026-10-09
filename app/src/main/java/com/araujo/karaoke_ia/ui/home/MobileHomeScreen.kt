@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,6 +31,7 @@ import com.araujo.karaoke_ia.data.UserScoreEntry
 import com.araujo.karaoke_ia.data.podiumEntry
 import com.araujo.karaoke_ia.ui.theme.*
 import java.io.File
+import kotlinx.coroutines.flow.collect
 
 /** Touch layout independent of the TV focus navigation, with one shared catalogue and queue. */
 @Composable
@@ -87,6 +89,10 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                                 Icon(Icons.Default.Close, "Limpar busca")
                             } })
                     }
+                    if (viewModel.isIndexing.value) {
+                        Text("Verificando músicas locais…", color = TextMuted, fontSize = 12.sp)
+                        LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                    }
                     when {
                         selected == HomeTab.CONFIGURACOES -> {
                             Text("Configurações da sessão", fontFamily = ReferenceHeadingFont, color = TextWhite)
@@ -98,7 +104,7 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                                 onClick = { viewModel.fetchMissingArtwork() }) { Text("Buscar capas") }
                         }
                         selected == HomeTab.RANKING -> MobileRanking(scores, Modifier.weight(1f))
-                        viewModel.isLoading.value -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        viewModel.isLoading.value && all.isEmpty() && viewModel.historyMusics.value.isEmpty() -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                         viewModel.loadError.value != null && all.isEmpty() && selected == HomeTab.INICIO && viewModel.historyMusics.value.isEmpty() -> {
@@ -141,7 +147,16 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                                 historySelected -> "As músicas cantadas aparecem aqui."
                                 else -> "Nenhuma música encontrada."
                             }, color = TextMuted)
-                            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 16.dp),
+                            val songListState = rememberLazyListState()
+                            LaunchedEffect(selected, query, songs.size, viewModel.hasMoreSearchResults.value, viewModel.isSearching.value) {
+                                snapshotFlow { songListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }.collect { last ->
+                                    if (selected == HomeTab.PESQUISAR && last >= songs.size - 3 && songs.isNotEmpty() &&
+                                        viewModel.hasMoreSearchResults.value && !viewModel.isSearching.value) {
+                                        viewModel.loadMoreSearchResults()
+                                    }
+                                }
+                            }
+                            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = songListState, contentPadding = PaddingValues(bottom = 16.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 itemsIndexed(songs, key = { index, song -> "$index:${song.code}" }) { _, song ->
                                     MobileSongRow(song, song.code in favorites, song.code in queue,
@@ -162,7 +177,7 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
 @Composable
 private fun MobileSongRow(song: MusicFile, favorite: Boolean, queued: Boolean, isQueue: Boolean,
     onPlay: () -> Unit, onFavorite: () -> Unit, onQueue: () -> Unit) {
-    Column(Modifier.fillMaxWidth().background(DarkCardElevated, MaterialTheme.shapes.medium).clickable(onClick = onPlay).padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().background(DarkCardElevated, MaterialTheme.shapes.medium).clickable(enabled = song.available, onClick = onPlay).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SongAlbumArt(song.code, song.title, song.artist, modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small))
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -174,11 +189,11 @@ private fun MobileSongRow(song: MusicFile, favorite: Boolean, queued: Boolean, i
                 if (favorite) "Remover dos favoritos" else "Salvar favorita", tint = if (favorite) GoldPrimary else TextMuted) }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onQueue, enabled = isQueue || !queued, modifier = Modifier.heightIn(min = 48.dp)) {
+            TextButton(onClick = onQueue, enabled = isQueue || (song.available && !queued), modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(if (isQueue) Icons.Default.Remove else if (queued) Icons.Default.Check else Icons.Default.Add, null)
                 Text(if (isQueue) "Remover" else if (queued) "Na fila" else "Adicionar")
             }
-            Button(onClick = onPlay, modifier = Modifier.heightIn(min = 48.dp)) {
+            Button(onClick = onPlay, enabled = song.available, modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(Icons.Default.PlayArrow, null); Text("Cantar")
             }
         }

@@ -61,6 +61,7 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
     var message by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableStateOf(0) }
     var ready by remember { mutableStateOf(false) }
+    var buffering by remember { mutableStateOf(false) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var pendingScoreId by rememberSaveable { mutableStateOf<String?>(null) }
     var scoreFeedback by rememberSaveable { mutableStateOf("") }
@@ -118,11 +119,17 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
         composeView.requestFocus()
         requester.requestFocus()
     }
-    LaunchedEffect(selectedId, retry) { fullscreen = false; ready = false; message = null; showControls = false; if (selectedId != null) { withFrameNanos { }; focus.requestFocus() } }
+    LaunchedEffect(selectedId, retry) { fullscreen = false; ready = false; buffering = false; message = null; showControls = false; performanceEnded = false; if (selectedId != null) { withFrameNanos { }; focus.requestFocus() } }
     LaunchedEffect(selectedId, retry, ready) {
         if (selectedId != null && !ready) {
             delay(25000)
             if (!ready && message == null) message = "O YouTube demorou para responder. Confira sua internet e tente novamente."
+        }
+    }
+    LaunchedEffect(selectedId, retry, buffering) {
+        if (buffering) {
+            delay(30000)
+            if (buffering) message = "O vídeo continua carregando. Verifique a conexão ou tente novamente."
         }
     }
     LaunchedEffect(ready, fullscreen) { if (ready && isTv && !fullscreen) { withFrameNanos { }; focusControls(playFocus) } }
@@ -209,11 +216,15 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
                         .border(1.dp, DarkCardBorder, RoundedCornerShape(16.dp))),
                     onReady = {
                         ready = true
+                        message = null
                         if (playNextWhenReady) {
                             playNextWhenReady = false
                             fullscreen = true
                             web?.evaluateJavascript("if(window.player)player.playVideo();", null)
                         }
+                    }, onStateChanged = { state ->
+                        buffering = state == 3
+                        if (state == 1) message = null
                     }, onPlaying = { if (!historyRecorded) { repository.recordPlayed(selected.song); onSongPlayed(); historyRecorded = true } }, onView = { playerView ->
                         web = playerView
                         playerView?.setOnKeyListener { _, code, event ->
@@ -233,7 +244,7 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
                                 }
                             } else false
                         }
-                    }, onError = { fullscreen = false; message = it },
+                    }, onError = { fullscreen = false; buffering = false; message = it },
                     onEnded = {
                         // Ignore duplicate ended events; each queue entry gets exactly one result.
                         if (!performanceEnded && pendingScoreId == null && selectedId == selected.id) {
@@ -253,6 +264,7 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
             }
             if (!fullscreen) {
             if (!ready && message == null) Text("Conectando ao YouTube…", color = TextMuted)
+            if (buffering && message == null) Text("Carregando vídeo…", color = TextMuted)
             message?.let { Text(it, color = TextMuted) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(enabled = ready, modifier = Modifier.focusRequester(playFocus).tvFocusFeedback(),
@@ -289,6 +301,11 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
             }
 
         }
+    }
+    if (fullscreen && buffering) {
+        Text(message ?: "Carregando vídeo…", color = Color.White,
+            modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(12.dp)
+                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(12.dp))
     }
     if (fullscreen && !showControls && !isTv) {
         TextButton(onClick = { showControls = true },

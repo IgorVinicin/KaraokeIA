@@ -20,6 +20,7 @@ import com.araujo.karaoke_ia.online.OnlineRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collect
 
 data class ArtworkBatchProgress(val completed: Int, val total: Int)
 
@@ -53,6 +54,8 @@ class HomeViewModel(
     val searchStatus: State<String?> = _searchStatus
     private val _isSearching = mutableStateOf(false)
     val isSearching: State<Boolean> = _isSearching
+    private val _hasMoreSearchResults = mutableStateOf(false)
+    val hasMoreSearchResults: State<Boolean> = _hasMoreSearchResults
 
     // ── Busca / código ────────────────────────────────────────────────────────
 
@@ -98,6 +101,8 @@ class HomeViewModel(
     /** Estado de carregamento do HD */
     private val _isLoading = mutableStateOf(true)
     val isLoading: State<Boolean> = _isLoading
+    private val _isIndexing = mutableStateOf(false)
+    val isIndexing: State<Boolean> = _isIndexing
 
     /** Mensagem de erro ao carregar */
     private val _loadError = mutableStateOf<String?>(null)
@@ -162,6 +167,9 @@ class HomeViewModel(
     // ── Init ──────────────────────────────────────────────────────────────────
 
     private var catalogLoadJob: kotlinx.coroutines.Job? = null
+    private var catalogReloadRequested = false
+    private var forceReloadRequested = false
+    private var lastStorageRevision: Int? = null
     private var searchJob: kotlinx.coroutines.Job? = null
     private var searchRevision = 0
 
@@ -169,6 +177,13 @@ class HomeViewModel(
         _favorites.value = favoritesRepo.getFavorites()
         _queueCodes.value = queueRepo.getQueue()
         loadScores()
+        musicRepository.catalogUpdates?.let { updates ->
+            viewModelScope.launch {
+                updates.collect { songs ->
+                    if (songs != null) applyCatalog(songs)
+                }
+            }
+        }
         loadAllMusics()
     }
 
@@ -185,7 +200,8 @@ class HomeViewModel(
         loadScores()
     }
 
-    fun prepareSong(code: String): Boolean = !code.startsWith("youtube:") || musicRepository.findMusicByCode(code) != null
+    fun prepareSong(code: String): Boolean = if (code.startsWith("youtube:")) musicRepository.findMusicByCode(code) != null
+        else _allMusics.value.any { it.code == code && it.available }
 
     private fun availableLibrary(musics: List<MusicFile>) =
         (musics + onlineRepository.savedSongs.map { it.asMusicFile() }).distinctBy { it.code }
@@ -211,33 +227,62 @@ class HomeViewModel(
     // ── Carregamento do HD ────────────────────────────────────────────────────
 
     fun loadAllMusics(forceRefresh: Boolean = false) {
-        if (catalogLoadJob?.isActive == true) return
-        catalogLoadJob = viewModelScope.launch {
-            _isLoading.value = true
-            _loadError.value = null
-
-            val musics = withContext(Dispatchers.IO) {
-                try { musicRepository.scanAllMusics(forceRefresh) }
-                catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                catch (e: Exception) { emptyList() }
-            }
-
-            _allMusics.value = musics
-
-            if (musics.isEmpty()) {
-                _loadError.value = "Nenhuma música encontrada no HD.\nVerifique se o HD está conectado."
-            }
-
-            applySearchFilter(_searchQuery.value, musics)
-            refreshArtistList(musics)
-            refreshFavoriteMusics(musics)
-            refreshHistoryMusics(musics)
-            refreshQueueMusics(musics)
-            loadScores()
-
-            _isLoading.value = false
-            if (_searchQuery.value.isNotBlank()) onSearchQueryChange(_searchQuery.value)
+        if (catalogLoadJob?.isActive == true) {
+            catalogReloadRequested = true
+            forceReloadRequested = forceReloadRequested || forceRefresh
+            return
         }
+        catalogLoadJob = viewModelScope.launch {
+            _isLoading.value = _allMusics.value.isEmpty()
+            _isIndexing.value = true
+            _loadError.value = null
+            try {
+                val snapshot = withContext(Dispatchers.IO) { musicRepository.loadCachedCatalog() }
+                if (snapshot.isNotEmpty()) {
+                    applyCatalog(snapshot)
+                    _isLoading.value = false
+                }
+                val musics = withContext(Dispatchers.IO) { musicRepository.scanAllMusics(forceRefresh) }
+                applyCatalog(musics)
+                if (musics.isEmpty()) {
+                    _loadError.value = "Nenhuma música encontrada no HD.\nVerifique se o HD está conectado."
+                }
+                if (_searchQuery.value.isNotBlank()) onSearchQueryChange(_searchQuery.value)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { _loadError.value = "Não foi possível atualizar o catálogo. Verifique o armazenamento." }
+            finally {
+                _isLoading.value = false
+                _isIndexing.value = false
+            }
+        }
+        catalogLoadJob?.invokeOnCompletion {
+            if (catalogReloadRequested) viewModelScope.launch {
+                val forced = forceReloadRequested
+                catalogReloadRequested = false
+                forceReloadRequested = false
+                loadAllMusics(forced)
+            }
+        }
+    }
+
+    fun onStorageChanged(revision: Int) {
+        val previous = lastStorageRevision
+        lastStorageRevision = revision
+        if (previous != null && previous != revision) loadAllMusics()
+    }
+
+    private suspend fun applyCatalog(musics: List<MusicFile>) {
+        if (_allMusics.value == musics) return
+        _allMusics.value = musics
+        if (musics.isNotEmpty()) _isLoading.value = false
+        // Updates during indexing use the snapshot in memory; user queries go straight to SQLite.
+        applySearchFilter(_searchQuery.value, musics)
+        refreshArtistList(musics)
+        refreshFavoriteMusics(musics)
+        refreshHistoryMusics(musics)
+        refreshQueueMusics(musics)
+        _loadError.value = if (musics.isNotEmpty() && musics.none { it.available })
+            "Armazenamento desconectado. Seu catálogo foi preservado." else null
     }
 
     // ── Digitação rápida por controle remoto ──────────────────────────────────
@@ -301,13 +346,21 @@ class HomeViewModel(
         _isSearching.value = cleanInput.isNotBlank()
         _filteredMusics.value = emptyList()
         _selectedSearchMusic.value = null
+        _hasMoreSearchResults.value = false
         searchJob = viewModelScope.launch {
             try {
                 kotlinx.coroutines.delay(180)
                 if (_isLoading.value) { _searchStatus.value = "Carregando músicas do aparelho…"; return@launch }
-                applySearchFilter(cleanInput, _allMusics.value)
+                val results = withContext(Dispatchers.IO) { musicRepository.searchLocal(cleanInput, 201) }
                 if (revision != searchRevision) return@launch
+                _hasMoreSearchResults.value = results.size > 200
+                _filteredMusics.value = results.take(200)
+                _selectedSearchMusic.value = _filteredMusics.value.firstOrNull()
                 if (_filteredMusics.value.isNotEmpty() || cleanInput.trim().length < 2) return@launch
+                if (_isIndexing.value) {
+                    _searchStatus.value = "Verificando músicas locais… A busca será atualizada ao concluir."
+                    return@launch
+                }
                 _searchStatus.value = "Não encontrei no aparelho. Buscando karaokê no YouTube…"
                 // Pause before spending a network request while the user is still typing.
                 kotlinx.coroutines.delay(550)
@@ -330,10 +383,31 @@ class HomeViewModel(
         _selectedSearchMusic.value = music
     }
 
+    fun loadMoreSearchResults() {
+        if (!_hasMoreSearchResults.value || _isSearching.value) return
+        val query = _searchQuery.value
+        val revision = searchRevision
+        val offset = _filteredMusics.value.size
+        _isSearching.value = true
+        searchJob = viewModelScope.launch {
+            try {
+                val page = withContext(Dispatchers.IO) { musicRepository.searchLocal(query, 201, offset) }
+                if (revision != searchRevision) return@launch
+                _filteredMusics.value = _filteredMusics.value + page.take(200)
+                _hasMoreSearchResults.value = page.size > 200
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (revision == searchRevision) _searchStatus.value = "Não foi possível carregar mais músicas. Tente novamente."
+            } finally { if (revision == searchRevision) _isSearching.value = false }
+        }
+    }
+
     private suspend fun applySearchFilter(query: String, all: List<MusicFile>) {
-        val filtered = withContext(Dispatchers.Default) { hybridSearch.localResults(query, all) }
+        val results = withContext(Dispatchers.IO) { musicRepository.searchLocal(query, 201) }
+        val filtered = results.take(200)
         if (query != _searchQuery.value || all !== _allMusics.value) return
         _filteredMusics.value = filtered
+        _hasMoreSearchResults.value = results.size > 200
         if (filtered.isNotEmpty()) {
             if (_selectedSearchMusic.value == null || !filtered.contains(_selectedSearchMusic.value)) {
                 _selectedSearchMusic.value = filtered.first()

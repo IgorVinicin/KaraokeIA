@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
 import com.araujo.karaoke_ia.auth.AccessGate
 import com.araujo.karaoke_ia.auth.AccessRepository
 import androidx.navigation.compose.rememberNavController
@@ -45,10 +46,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var remoteQueueServer: RemoteQueueServer
     private var hadStoragePermission = false
     private lateinit var accessRepository: AccessRepository
+    private val storageRevision = mutableIntStateOf(0)
 
     private val mediaReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            recreate()
+            storageRevision.intValue++
         }
     }
 
@@ -103,7 +105,8 @@ class MainActivity : ComponentActivity() {
                         queueRepository     = queueRepository,
                             scoreRepository     = scoreRepository,
                             artworkRepository  = artworkRepository,
-                            remoteUrl          = intent.getStringExtra("remote_url") ?: remote.localUrl()
+                            remoteUrl          = intent.getStringExtra("remote_url") ?: remote.localUrl(),
+                            storageRevision = storageRevision.intValue
                     )
                     }
                 }
@@ -113,6 +116,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        storageRevision.intValue++
         if (::storageManager.isInitialized && storageManager.hasAllFilesPermission() != hadStoragePermission) {
             hadStoragePermission = storageManager.hasAllFilesPermission()
             recreate()
