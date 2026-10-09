@@ -53,6 +53,15 @@ class QueueRepository(private val context: Context) {
         return next
     }
 
+    /** Removes the head only if it is still the song shown to the user. */
+    @Synchronized fun popNextIfMatches(expectedCode: String): String? {
+        val current = getQueue().toMutableList()
+        if (current.firstOrNull() != expectedCode) return null
+        val next = current.removeAt(0)
+        saveQueue(current)
+        return next
+    }
+
     /** Apenas espreita qual é a próxima música da fila sem removê-la. */
     fun peekNext(): String? = getQueue().firstOrNull()
 

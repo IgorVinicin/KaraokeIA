@@ -3,6 +3,7 @@ package com.araujo.karaoke_ia.online
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.util.AtomicFile
 import androidx.core.text.HtmlCompat
 import java.io.File
 import java.util.Properties
@@ -24,18 +25,27 @@ import java.nio.charset.StandardCharsets
 data class OnlineSong(val videoId: String, val title: String, val channel: String)
 data class OnlineQueueEntry(val id: String, val song: OnlineSong)
 
+internal fun normalizeYouTubeKey(value: String): String {
+    val normalized = value.trim().removeSurrounding("\"").removeSurrounding("'").trim()
+    require(Regex("AIza[A-Za-z0-9_-]{35}").matches(normalized)) {
+        "Informe uma chave válida da API do YouTube."
+    }
+    return normalized
+}
+
 class OnlineRepository(context: Context) {
     // Device configuration stays private, outside backups and outside the distributed APK.
-    private val apiKey = runCatching {
+    private val keyFile = AtomicFile(File(context.applicationContext.noBackupFilesDir, "youtube_config"))
+    @Volatile private var apiKey = runCatching {
         val settings = Properties()
-        File(context.applicationContext.noBackupFilesDir, "youtube_config").inputStream().use { settings.load(it) }
-        (settings.getProperty("YOUTUBE_KEY") ?: settings.getProperty("YOUTUBE_API_KEY", ""))
-            .trim().removeSurrounding("\"").removeSurrounding("'")
+        keyFile.openRead().use { settings.load(it) }
+        normalizeYouTubeKey(settings.getProperty("YOUTUBE_KEY") ?: settings.getProperty("YOUTUBE_API_KEY", ""))
     }.getOrDefault("")
     private val prefs = context.applicationContext.getSharedPreferences("online_queue", Context.MODE_PRIVATE)
     private val mutableQueue = MutableStateFlow(readQueue())
     val queue = mutableQueue.asStateFlow()
-    val searchConfigured get() = apiKey.isNotBlank()
+    private val mutableSearchConfigured = MutableStateFlow(apiKey.isNotBlank())
+    val searchConfigured = mutableSearchConfigured.asStateFlow()
     private val libraryPrefs = context.applicationContext.getSharedPreferences("online_library", Context.MODE_PRIVATE)
     private val mutableFavorites = MutableStateFlow(readSongs("favorites", MAX_FAVORITES))
     private val mutableHistory = MutableStateFlow(readSongs("history", MAX_HISTORY))
@@ -43,6 +53,37 @@ class OnlineRepository(context: Context) {
     val history = mutableHistory.asStateFlow()
     private data class CachedSongs(val savedAt: Long, val songs: List<OnlineSong>)
     private val searchCache = linkedMapOf<String, CachedSongs>()
+
+    /** Call on an IO dispatcher; persists only in this device's private no-backup storage. */
+    @Synchronized fun configureSearchKey(value: String) {
+        val normalized = normalizeYouTubeKey(value)
+        var stream: java.io.FileOutputStream? = null
+        try {
+            stream = keyFile.startWrite()
+            stream.write("YOUTUBE_KEY=$normalized\n".toByteArray(StandardCharsets.UTF_8))
+            keyFile.finishWrite(stream)
+        } catch (_: Exception) {
+            runCatching { keyFile.failWrite(stream) }
+            throw IllegalStateException("Não foi possível salvar a configuração do YouTube neste aparelho.")
+        }
+        apiKey = normalized
+        searchCache.clear()
+        mutableSearchConfigured.value = true
+    }
+
+    /** Call on an IO dispatcher. Links remain available after removing the search key. */
+    @Synchronized fun clearSearchKey() {
+        try {
+            keyFile.delete()
+            check(!keyFile.baseFile.exists() && !File(keyFile.baseFile.path + ".bak").exists() &&
+                !File(keyFile.baseFile.path + ".new").exists())
+        } catch (_: Exception) {
+            throw IllegalStateException("Não foi possível remover a configuração do YouTube neste aparelho.")
+        }
+        apiKey = ""
+        searchCache.clear()
+        mutableSearchConfigured.value = false
+    }
 
     @Synchronized private fun cachedSearch(query: String): List<OnlineSong>? {
         val cached = searchCache[query] ?: return null
@@ -53,7 +94,8 @@ class OnlineRepository(context: Context) {
         return cached.songs
     }
 
-    @Synchronized private fun rememberSearch(query: String, songs: List<OnlineSong>) {
+    @Synchronized private fun rememberSearch(query: String, songs: List<OnlineSong>, requestKey: String) {
+        if (requestKey != apiKey) return
         searchCache.remove(query)
         searchCache[query] = CachedSongs(SystemClock.elapsedRealtime(), songs)
         while (searchCache.size > MAX_CACHED_SEARCHES) searchCache.remove(searchCache.keys.first())
@@ -129,12 +171,13 @@ class OnlineRepository(context: Context) {
         OnlineSong(id, json.optString("title", "Vídeo do YouTube"), json.optString("author_name", "YouTube"))
     }
     suspend fun search(query: String): List<OnlineSong> = withContext(Dispatchers.IO) {
-        check(searchConfigured) { "Busca por nome ainda não configurada. Você pode adicionar um link do YouTube." }
+        val requestKey = apiKey
+        check(requestKey.isNotBlank()) { "Busca por nome ainda não configurada. Você pode adicionar um link do YouTube." }
         require(query.trim().length >= 2) { "Digite pelo menos dois caracteres." }
         val cleanQuery = query.trim()
         cachedSearch(cleanQuery)?.let { return@withContext it }
         val json = request("https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true" +
-            "&videoSyndicated=true&maxResults=15&q=${encode(query.trim() + " karaoke")}&key=${encode(apiKey)}")
+            "&videoSyndicated=true&maxResults=15&q=${encode(query.trim() + " karaoke")}&key=${encode(requestKey)}")
         val items = json.optJSONArray("items") ?: JSONArray()
         val songs = (0 until items.length()).mapNotNull { index ->
             val item = items.getJSONObject(index)
@@ -143,7 +186,7 @@ class OnlineRepository(context: Context) {
             if (!validId(id) || snippet == null) null else OnlineSong(id,
                 decodeHtml(snippet.optString("title")), decodeHtml(snippet.optString("channelTitle")))
         }
-        rememberSearch(cleanQuery, songs)
+        rememberSearch(cleanQuery, songs, requestKey)
         songs
     }
     private fun request(url: String): JSONObject {
@@ -158,8 +201,8 @@ class OnlineRepository(context: Context) {
                 else -> "YouTube indisponível agora. Tente novamente."
             })
             return connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
-        } catch (error: java.io.IOException) {
-            throw IllegalStateException("Não foi possível conectar ao YouTube. Confira sua internet.", error)
+        } catch (_: java.io.IOException) {
+            throw IllegalStateException("Não foi possível conectar ao YouTube. Confira sua internet.")
         } finally { connection.disconnect() }
     }
     companion object {

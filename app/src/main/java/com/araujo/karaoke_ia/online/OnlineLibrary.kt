@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -39,6 +40,8 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -51,6 +54,8 @@ import com.araujo.karaoke_ia.ui.theme.*
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class OnlinePanel(val label: String, val icon: ImageVector) {
     HOME("Início", Icons.Outlined.Home), SEARCH("Pesquisar", Icons.Outlined.Search),
@@ -72,6 +77,11 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
     val queue by repository.queue.collectAsState()
     val favorites by repository.favorites.collectAsState()
     val history by repository.history.collectAsState()
+    val searchConfigured by repository.searchConfigured.collectAsState()
+    var showSearchConfiguration by remember { mutableStateOf(false) }
+    var searchKeyInput by remember { mutableStateOf("") }
+    var savingSearchKey by remember { mutableStateOf(false) }
+    var searchKeyError by remember { mutableStateOf<String?>(null) }
     var panelName by rememberSaveable { mutableStateOf(OnlinePanel.HOME.name) }
     val panel = OnlinePanel.valueOf(panelName)
     var query by rememberSaveable { mutableStateOf("") }
@@ -183,13 +193,13 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                         else -> false
                     }
                 },
-                label = { Text(if(repository.searchConfigured) "Música, artista ou link do YouTube" else "Link do vídeo do YouTube") },
+                label = { Text(if(searchConfigured) "Música, artista ou link do YouTube" else "Link do vídeo do YouTube") },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) }, singleLine = true, shape = RoundedCornerShape(12.dp))
             Button(modifier = Modifier.onlineFocus(), enabled = !busy && query.isNotBlank(), onClick = {
                 busy = true; onMessage(null)
                 scope.launch {
                     try {
-                        results = if(!repository.searchConfigured || OnlineRepository.parseVideoId(query) != null)
+                        results = if(!searchConfigured || OnlineRepository.parseVideoId(query) != null)
                             listOf(repository.fromLink(query)) else repository.search(query)
                         activeId = results.firstOrNull()?.videoId
                         if(results.isEmpty()) onMessage("Nenhum vídeo encontrado. Tente outra busca.")
@@ -271,7 +281,10 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Configurações da sessão", color=TextWhite, fontSize=22.sp, fontFamily=ReferenceHeadingFont)
-                Text(if(repository.searchConfigured) "Pesquisa por nome disponível neste dispositivo." else "Pesquisa por link disponível. A pesquisa por nome requer a configuração do YouTube.", color=TextMuted)
+                Text(if(searchConfigured) "Pesquisa por nome disponível neste dispositivo." else "Pesquisa por link disponível. A pesquisa por nome requer a configuração do YouTube.", color=TextMuted)
+                OutlinedButton(modifier = Modifier.onlineFocus(), onClick = {
+                    searchKeyInput = ""; searchKeyError = null; showSearchConfiguration = true
+                }) { Text(if(searchConfigured) "Configurar pesquisa / remover chave" else "Configurar pesquisa por nome") }
                 Text("Pontuação recreativa · 1º: 96–100 · 2º: 90–95 · 3º: 87–89", color=TextMuted)
                 Text("Use as setas para navegar, OK para selecionar e Voltar para retornar.", color=TextMuted)
                 Button(modifier = Modifier.onlineFocus(), onClick=onModes) { Text("Trocar modo online / offline") }
@@ -323,6 +336,63 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
             Text("OK  Selecionar     ·     Voltar  Retornar", color=TextMuted, fontSize=10.sp)
             Text("PALCO ONLINE", color=TextSubtle, fontSize=10.sp)
         }
+    }
+    if(showSearchConfiguration) {
+        fun dismissConfiguration() {
+            if(!savingSearchKey) { searchKeyInput = ""; searchKeyError = null; showSearchConfiguration = false }
+        }
+        fun updateConfiguration(remove: Boolean) {
+            savingSearchKey = true
+            searchKeyError = null
+            val input = searchKeyInput
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        if(remove) repository.clearSearchKey() else repository.configureSearchKey(input)
+                    }
+                    searchKeyInput = ""
+                    showSearchConfiguration = false
+                    onMessage(if(remove) "Configuração removida. Links do YouTube continuam disponíveis." else "Pesquisa por nome configurada neste aparelho.")
+                } catch(cancelled: CancellationException) { throw cancelled }
+                catch(error: IllegalArgumentException) { searchKeyError = "Confira a chave da YouTube Data API e tente novamente." }
+                catch(error: Exception) { searchKeyError = "Não foi possível salvar a configuração. Tente novamente." }
+                finally { savingSearchKey = false }
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { dismissConfiguration() },
+            title = { Text("Pesquisa por nome") },
+            text = {
+                Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Opcional: informe uma chave da YouTube Data API para buscar músicas e artistas. Sem chave, use links de vídeos.")
+                    Text("A chave fica privada neste aparelho, fora dos backups.")
+                    OutlinedTextField(searchKeyInput, { searchKeyInput = it.take(256); searchKeyError = null },
+                        modifier = Modifier.fillMaxWidth().onlineFocus().onPreviewKeyEvent { event ->
+                            if(!isTv || event.type != KeyEventType.KeyDown) false else when(event.key) {
+                                Key.DirectionUp -> { focusManager.moveFocus(FocusDirection.Up); true }
+                                Key.DirectionDown -> { focusManager.moveFocus(FocusDirection.Down); true }
+                                else -> false
+                            }
+                        },
+                        label = { Text("Chave da YouTube Data API") },
+                        singleLine = true, enabled = !savingSearchKey,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        isError = searchKeyError != null)
+                    searchKeyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if(searchConfigured) OutlinedButton(enabled = !savingSearchKey,
+                        modifier = Modifier.onlineFocus(), onClick = { updateConfiguration(true) }) { Text("Remover chave deste aparelho") }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !savingSearchKey && searchKeyInput.isNotBlank(),
+                    modifier = Modifier.onlineFocus(), onClick = { updateConfiguration(false) }) {
+                    Text(if(savingSearchKey) "Salvando…" else "Salvar")
+                }
+            },
+            dismissButton = { TextButton(enabled = !savingSearchKey, onClick = { dismissConfiguration() }) { Text("Cancelar") } }
+        )
     }
 }
 

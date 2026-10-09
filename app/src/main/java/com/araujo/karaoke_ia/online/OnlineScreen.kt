@@ -122,6 +122,7 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
     }
     LaunchedEffect(ready, fullscreen) { if (ready && isTv && !fullscreen) { withFrameNanos { }; focusControls(playFocus) } }
     LaunchedEffect(fullscreen) {
+        if (fullscreen && !isTv) showControls = true
         withFrameNanos { }
         if (fullscreen) focusControls(fullscreenFocus) else if (ready && selected != null) focusControls(playFocus)
     }
@@ -267,7 +268,7 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
                 Spacer(Modifier.width(6.dp)); Text("YouTube")
             }
             }
-            Text("Ao reproduzir, o vídeo ocupa toda a tela. Use Voltar para acessar os controles.",
+            Text("Ao reproduzir, o vídeo ocupa toda a tela. Use OK para abrir os controles e Voltar para retornar.",
                 fontFamily = ReferenceBodyFont, color = TextMuted, fontSize = 11.sp)
             }
         } else {
@@ -280,10 +281,18 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
 
         }
     }
-    if (fullscreen && (showControls || !isTv)) {
-        Row(Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(12.dp)
+    if (fullscreen && !showControls && !isTv) {
+        TextButton(onClick = { showControls = true },
+            modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(12.dp)
+                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp))) {
+            Text("Controles")
+        }
+    }
+    if (fullscreen && showControls) {
+        FlowRow(Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(12.dp)
             .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(16.dp)).padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Button(modifier = Modifier.focusRequester(overlayFocus), onClick = { web?.evaluateJavascript("if(window.player){if(player.getPlayerState()===1)player.pauseVideo();else player.playVideo();}", null) }) {
                 Text("Reproduzir / Pausar")
             }

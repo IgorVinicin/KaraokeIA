@@ -1,5 +1,9 @@
 # Continuidade do Karaokê — 08/10/2026
 
+> Atualização em casa: o usuário solicitou encerrar o emulador e preparar release assinado para testar na TV Box. Consulte `VALIDACAO_EM_CASA.md`, `producao.md` e `TESTAR_NA_TVBOX.md` para o estado desta sessão. O checkpoint original abaixo permanece como histórico; a configuração YouTube pelo próprio app e a assinatura release foram adicionadas depois dele.
+
+> Por solicitação do usuário, o APK release 1.0.1 e seu checksum acompanham o código em `dist/`. `.env`, keystore e `signing.properties` permanecem privados e não acompanham o Git.
+
 ## Ponto de parada
 
 O usuário pediu para publicar o trabalho no Git e continuar em casa. O redesign está implementado e compila, mas a validação completa da nova interface ainda não terminou. Não tratar este checkpoint como release de produção.

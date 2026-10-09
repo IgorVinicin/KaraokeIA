@@ -1,0 +1,7 @@
+2026-10-08: PASS on Temurin JDK 17.0.20.1, Kotlin compiler 1.9.23.
+Command: powershell -NoProfile -ExecutionPolicy Bypass -File reports/finalization/youtube-config-regression/run.ps1
+PASS: 6 accepted normalization/format cases, 11 rejected cases, generic error messages
+
+The runner extracts and compiles the actual Android-independent normalizeYouTubeKey helper from OnlineRepository.kt.
+Inputs are synthetic format-only strings; the test never reads or outputs user/device credentials.
+Android AtomicFile persistence, StateFlow updates, release UI provisioning, and network search require Android QA.

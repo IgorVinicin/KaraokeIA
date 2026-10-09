@@ -21,3 +21,15 @@ local.properties
 /reports/finalization/redesign-probe/baseline/
 /reports/finalization/redesign-probe/*.class
 /Microsoft/Windows/PowerShell/ModuleAnalysisCache
+/.tools/
+/build-home.log
+/gradle-home-threads.txt
+/signing.properties
+/.signing/
+/dist/*
+!/dist/KaraokeIA-release.apk
+!/dist/KaraokeIA-release.sha256
+!/dist/LEIA-ME.md
+!/dist/producao.md
+!/dist/release-summary.json
+/release-*.log

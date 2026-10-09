@@ -3,6 +3,11 @@ package com.araujo.karaoke_ia.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -13,6 +18,7 @@ import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicRepository
+import com.araujo.karaoke_ia.data.MusicFile
 import com.araujo.karaoke_ia.data.QueueRepository
 import com.araujo.karaoke_ia.data.ScoreRepository
 import com.araujo.karaoke_ia.ui.home.HomeScreen
@@ -25,6 +31,8 @@ import com.araujo.karaoke_ia.data.StorageManager
 import com.araujo.karaoke_ia.online.ModeScreen
 import com.araujo.karaoke_ia.online.OnlineRepository
 import com.araujo.karaoke_ia.online.OnlineScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 sealed class Screen(val route: String) {
     object Home   : Screen("home")
@@ -130,8 +138,23 @@ fun NavGraph(
                 scoreEntry?.let { scoreRepository.getPodiumPosition(it.id) }
             }
 
-            val nextCode = queueRepository.peekNext()
-            val nextMusic = nextCode?.let { musicRepository.findMusicByCode(it) }
+            var queuedCodes by remember(queueRepository) { mutableStateOf(queueRepository.getQueue()) }
+            DisposableEffect(queueRepository) {
+                val subscription = queueRepository.observeChanges { queuedCodes = queueRepository.getQueue() }
+                queuedCodes = queueRepository.getQueue()
+                onDispose { subscription.close() }
+            }
+            val nextCode = queuedCodes.firstOrNull()
+            val nextMusic by key(nextCode) {
+                produceState<MusicFile?>(null, nextCode, musicRepository) {
+                    value = nextCode?.let { code -> withContext(Dispatchers.IO) { musicRepository.findMusicByCode(code) } }
+                }
+            }
+            val scoredMusic by key(scoreEntry?.id) {
+                produceState<MusicFile?>(null, scoreEntry?.id, musicRepository) {
+                    value = scoreEntry?.let { entry -> withContext(Dispatchers.IO) { musicRepository.findMusicByCode(entry.musicCode) } }
+                }
+            }
 
             key(scoreEntry?.id ?: backStackEntry.id) {
             ScoreScreen(
@@ -140,14 +163,17 @@ fun NavGraph(
                 nextMusic    = nextMusic,
                 allowPhoto   = rankingPosition != null && rankingPosition <= 3,
                 rankingPosition = rankingPosition,
-                scoredMusic = scoreEntry?.let { musicRepository.findMusicByCode(it.musicCode) },
+                scoredMusic = scoredMusic,
                 artworkRepository = artworkRepository,
                 onPhotoCaptured = { path -> scoreEntry?.let { scoreRepository.attachPhotoToScore(it.id, path) } },
                 remoteUrl = remoteUrl,
                 onPlayNext   = { codeToPlay ->
-                    queueRepository.popNext()
-                    navController.navigate(Screen.Player.createRoute(codeToPlay)) {
-                        popUpTo(Screen.Home.route)
+                    val next = nextCode?.takeIf { nextMusic?.code == codeToPlay }
+                        ?.let { queueRepository.popNextIfMatches(it) }
+                    if (next != null) {
+                        navController.navigate(Screen.Player.createRoute(codeToPlay)) {
+                            popUpTo(Screen.Home.route)
+                        }
                     }
                 },
                 onBackToHome = {

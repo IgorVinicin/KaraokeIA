@@ -17,6 +17,10 @@ e a tela de resultado permite confirmar a reprodução da próxima.
 
 ## Ativar busca por música/artista
 
+No APK release 1.0.1, use Online → Configurações → Configurar pesquisa por nome. Informe somente o valor da chave YouTube Data API e salve; é possível removê-la pelo mesmo painel. A chave é mascarada, armazenada com gravação atômica na área privada `no_backup` e não acompanha o APK. O `.env` do computador não configura automaticamente a TV Box.
+
+As etapas abaixo descrevem a configuração pelo computador para o APK **debug**.
+
 1. Crie um projeto no Google Cloud e habilite YouTube Data API v3.
 2. Crie uma chave e configure restrições apropriadas para o aplicativo/API.
 3. No arquivo app/.env, ignorado pelo Git, acrescente YOUTUBE_KEY=SUA_CHAVE.
@@ -28,7 +32,7 @@ e a tela de resultado permite confirmar a reprodução da próxima.
 
 A chave fica somente na área privada do aparelho, excluída dos backups, e não
 é incluída no APK. A configuração do teste usa run-as e requer o APK debug.
-Para distribuição a clientes, prefira um backend com autenticação e controle
+O release oferece configuração privada por aparelho. Para provisionamento central de vários clientes, prefira um backend com autenticação e controle
 de cota. Não coloque a chave no Git nem em logs.
 As buscas são feitas apenas ao pressionar Buscar, com até 15 resultados de vídeos
 incorporáveis e o termo karaoke. Cotas e bloqueios são definidos pelo YouTube.

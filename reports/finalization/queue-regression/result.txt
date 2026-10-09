@@ -1,0 +1,8 @@
+2026-10-08: PASS on Temurin JDK 17.0.20.1, Kotlin compiler 1.9.23.
+Command: powershell -NoProfile -ExecutionPolicy Bypass -File reports/finalization/queue-regression/run.ps1
+PASS: stale head, changed queue, duplicate preservation, repository recreation, empty queue, observation/disposal
+
+The probe compiles the actual QueueRepository.kt against an in-memory Android SharedPreferences stub.
+It verifies the atomic expected-head guard and that only one duplicate reservation is consumed.
+Recreating the repository checks reading the existing preferences instance; this is not a disk-persistence or device-restart test.
+Android runtime navigation, Compose effects, and storage durability require device/emulator QA.
