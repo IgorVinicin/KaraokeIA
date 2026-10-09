@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
 import android.util.AtomicFile
+import com.araujo.karaoke_ia.BuildConfig
+import com.araujo.karaoke_ia.auth.AccessRepository
 import androidx.core.text.HtmlCompat
 import java.io.File
 import java.util.Properties
@@ -33,7 +35,7 @@ internal fun normalizeYouTubeKey(value: String): String {
     return normalized
 }
 
-class OnlineRepository(context: Context) {
+class OnlineRepository(context: Context, private val access: AccessRepository? = null) {
     // Device configuration stays private, outside backups and outside the distributed APK.
     private val keyFile = AtomicFile(File(context.applicationContext.noBackupFilesDir, "youtube_config"))
     @Volatile private var apiKey = runCatching {
@@ -44,11 +46,23 @@ class OnlineRepository(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("online_queue", Context.MODE_PRIVATE)
     private val mutableQueue = MutableStateFlow(readQueue())
     val queue = mutableQueue.asStateFlow()
-    private val mutableSearchConfigured = MutableStateFlow(apiKey.isNotBlank())
+    val usesSearchService = access != null || BuildConfig.SEARCH_SERVICE_URL.isNotBlank()
+    private val mutableSearchConfigured = MutableStateFlow(usesSearchService || apiKey.isNotBlank())
     val searchConfigured = mutableSearchConfigured.asStateFlow()
     private val libraryPrefs = context.applicationContext.getSharedPreferences("online_library", Context.MODE_PRIVATE)
     private val mutableFavorites = MutableStateFlow(readSongs("favorites", MAX_FAVORITES))
     private val mutableHistory = MutableStateFlow(readSongs("history", MAX_HISTORY))
+    private var knownSongs = readSongs("known_songs", Int.MAX_VALUE)
+    val savedSongs: List<OnlineSong>
+        @Synchronized get() = (knownSongs + mutableFavorites.value + mutableHistory.value +
+            mutableQueue.value.map { it.song }).distinctBy { it.videoId }
+
+    @Synchronized fun rememberSong(song: OnlineSong) {
+        require(validId(song.videoId))
+        if (knownSongs.firstOrNull { it.videoId == song.videoId } == song) return
+        knownSongs = listOf(song) + knownSongs.filterNot { it.videoId == song.videoId }
+        saveSongs("known_songs", knownSongs)
+    }
     val favorites = mutableFavorites.asStateFlow()
     val history = mutableHistory.asStateFlow()
     private data class CachedSongs(val savedAt: Long, val songs: List<OnlineSong>)
@@ -82,7 +96,7 @@ class OnlineRepository(context: Context) {
         }
         apiKey = ""
         searchCache.clear()
-        mutableSearchConfigured.value = false
+        mutableSearchConfigured.value = usesSearchService
     }
 
     @Synchronized private fun cachedSearch(query: String): List<OnlineSong>? {
@@ -172,12 +186,24 @@ class OnlineRepository(context: Context) {
     }
     suspend fun search(query: String): List<OnlineSong> = withContext(Dispatchers.IO) {
         val requestKey = apiKey
-        check(requestKey.isNotBlank()) { "Busca por nome ainda não configurada. Você pode adicionar um link do YouTube." }
+        check(usesSearchService || requestKey.isNotBlank()) { "A busca ainda não está configurada. Configure o servidor de pesquisa ou uma chave neste aparelho." }
         require(query.trim().length >= 2) { "Digite pelo menos dois caracteres." }
+        require(query.trim().length <= 160) { "Use até 160 caracteres na pesquisa." }
         val cleanQuery = query.trim()
         cachedSearch(cleanQuery)?.let { return@withContext it }
+        if (usesSearchService) {
+            val json = access?.search(cleanQuery) ?: request(BuildConfig.SEARCH_SERVICE_URL + "/search?q=" + encode(cleanQuery))
+            val items = json.optJSONArray("songs") ?: JSONArray()
+            val songs = (0 until minOf(items.length(), 15)).mapNotNull { index ->
+                val song = items.optJSONObject(index) ?: return@mapNotNull null
+                val id = song.optString("videoId")
+                if (!validId(id)) null else OnlineSong(id, decodeHtml(song.optString("title")), decodeHtml(song.optString("channel")))
+            }
+            rememberSearch(cleanQuery, songs, requestKey)
+            return@withContext songs
+        }
         val json = request("https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true" +
-            "&videoSyndicated=true&maxResults=15&q=${encode(query.trim() + " karaoke")}&key=${encode(requestKey)}")
+            "&videoSyndicated=true&relevanceLanguage=pt&maxResults=15&q=${encode(cleanQuery + " karaoke")}&key=${encode(requestKey)}")
         val items = json.optJSONArray("items") ?: JSONArray()
         val songs = (0 until items.length()).mapNotNull { index ->
             val item = items.getJSONObject(index)
@@ -196,7 +222,10 @@ class OnlineRepository(context: Context) {
             connection.readTimeout = 15000
             val status = connection.responseCode
             if (status !in 200..299) throw IllegalStateException(when (status) {
-                400, 403 -> "O YouTube recusou a solicitação. Confira o vídeo ou a chave e a cota da API."
+                400 -> "Confira o nome pesquisado ou o link do vídeo."
+                403 -> "O YouTube recusou a solicitação. Confira a configuração e a cota da API."
+                429 -> "Limite de pesquisas atingido. Aguarde um pouco e tente novamente."
+                503 -> "A pesquisa está temporariamente indisponível. Tente novamente mais tarde."
                 404 -> "Vídeo não encontrado ou indisponível."
                 else -> "YouTube indisponível agora. Tente novamente."
             })
@@ -231,6 +260,12 @@ class OnlineRepository(context: Context) {
             return text
         }
         fun validId(id: String) = VIDEO_ID_PATTERN.matches(id)
+        fun isVideoLink(input: String): Boolean {
+            val text = input.trim()
+            val uri = Uri.parse(if (text.startsWith("https://") || text.startsWith("http://")) text else "https://$text")
+            return uri.host?.lowercase() in setOf("youtu.be", "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com") &&
+                parseVideoId(text) != null
+        }
         private fun decodeHtml(value: String) = HtmlCompat.fromHtml(value, HtmlCompat.FROM_HTML_MODE_LEGACY).toString()
         fun parseVideoId(input: String): String? {
             val text = input.trim()

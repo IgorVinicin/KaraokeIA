@@ -1,5 +1,7 @@
 package com.araujo.karaoke_ia.online
 
+import com.araujo.karaoke_ia.ui.components.tvFocusFeedback
+
 import android.content.Intent
 import android.net.Uri
 import android.webkit.WebView
@@ -50,16 +52,20 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
-    remoteUrl: String? = null, onModes: () -> Unit) {
+    remoteUrl: String? = null, onModes: () -> Unit,
+    initialSong: OnlineSong? = null,
+    onSongPlayed: () -> Unit = {},
+    onPerformanceFinished: (Int, String) -> Unit = { _, _ -> }) {
     val queue by repository.queue.collectAsState()
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedId by rememberSaveable(initialSong?.videoId) { mutableStateOf(initialSong?.videoId) }
     var message by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableStateOf(0) }
     var ready by remember { mutableStateOf(false) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var pendingScoreId by rememberSaveable { mutableStateOf<String?>(null) }
     var scoreFeedback by rememberSaveable { mutableStateOf("") }
-    var playNextWhenReady by rememberSaveable { mutableStateOf(false) }
+    var playNextWhenReady by rememberSaveable { mutableStateOf(initialSong != null) }
+    var performanceEnded by rememberSaveable(initialSong?.videoId) { mutableStateOf(false) }
     var web by remember { mutableStateOf<WebView?>(null) }
     var showControls by remember { mutableStateOf(false) }
     val libraryState = rememberSaveableStateHolder()
@@ -70,9 +76,8 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
     val fullscreenFocus = remember { FocusRequester() }
     val overlayFocus = remember { FocusRequester() }
     val composeView = LocalView.current
-    val isTv = LocalConfiguration.current.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
-        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    val selected = queue.firstOrNull { it.id == selectedId }
+    val isTv = com.araujo.karaoke_ia.ui.components.usesTvNavigation(LocalContext.current, LocalConfiguration.current)
+    val selected = initialSong?.let { OnlineQueueEntry(it.videoId, it) } ?: queue.firstOrNull { it.id == selectedId }
     var historyRecorded by remember(selectedId) { mutableStateOf(false) }
     val completedScore = remember(pendingScoreId) {
         pendingScoreId?.let { id -> scoreRepository.getAllScores().firstOrNull { it.id == id } }
@@ -147,7 +152,9 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
         }
     }
     BackHandler(selected != null) {
-        if (showControls) showControls = false else if (fullscreen) fullscreen = false else { selectedId = null; playNextWhenReady = false }
+        if (showControls) showControls = false else if (fullscreen) fullscreen = false
+        else if (initialSong != null) onModes()
+        else { selectedId = null; playNextWhenReady = false }
     }
     fun add(song: OnlineSong, play: Boolean) {
         try {
@@ -174,15 +181,15 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
         if (!fullscreen && selected != null) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text(if (selected != null) "PALCO ONLINE" else "Modo online · YouTube",
+                Text(if (selected != null) "SoltaVoz · Online" else "Modo online · YouTube",
                     fontFamily = ReferenceHeadingFont, color = if (selected != null) GoldPrimary else TextWhite,
                     fontSize = if (selected != null) 17.sp else 22.sp)
                 if (selected != null) Text("Prepare a voz e solte o som", fontFamily = ReferenceBodyFont,
                     color = TextMuted, fontSize = 12.sp)
             }
-            TextButton(onClick = { if (selected != null) { selectedId = null; playNextWhenReady = false } else onModes() },
+            TextButton(onClick = { if (initialSong != null) onModes() else if (selected != null) { selectedId = null; playNextWhenReady = false } else onModes() },
                 modifier = Modifier.heightIn(min = 48.dp).focusRequester(focus)) {
-                Text(if (selected != null) "Voltar à fila" else "Trocar modo")
+                Text("Voltar ao catálogo")
             }
         }
         }
@@ -207,7 +214,7 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
                             fullscreen = true
                             web?.evaluateJavascript("if(window.player)player.playVideo();", null)
                         }
-                    }, onPlaying = { if (!historyRecorded) { repository.recordPlayed(selected.song); historyRecorded = true } }, onView = { playerView ->
+                    }, onPlaying = { if (!historyRecorded) { repository.recordPlayed(selected.song); onSongPlayed(); historyRecorded = true } }, onView = { playerView ->
                         web = playerView
                         playerView?.setOnKeyListener { _, code, event ->
                             if (isTv && event.action == android.view.KeyEvent.ACTION_DOWN) {
@@ -229,16 +236,18 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
                     }, onError = { fullscreen = false; message = it },
                     onEnded = {
                         // Ignore duplicate ended events; each queue entry gets exactly one result.
-                        if (pendingScoreId == null && selectedId == selected.id) {
+                        if (!performanceEnded && pendingScoreId == null && selectedId == selected.id) {
+                            performanceEnded = true
                             val result = ScoreGenerator.generateScore()
                             val entry = scoreRepository.saveScore("youtube:${selected.song.videoId}",
                                 selected.song.title, selected.song.channel, result.score)
-                            pendingScoreId = entry.id
+                            if (initialSong == null) pendingScoreId = entry.id
                             scoreFeedback = result.feedback
-                            repository.remove(selected.id)
+                            if (initialSong == null) repository.remove(selected.id)
                             selectedId = null
                             fullscreen = false
                             playNextWhenReady = false
+                            if (initialSong != null) onPerformanceFinished(result.score, result.feedback)
                         }
                     })
             }
@@ -246,17 +255,17 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
             if (!ready && message == null) Text("Conectando ao YouTube…", color = TextMuted)
             message?.let { Text(it, color = TextMuted) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(enabled = ready, modifier = Modifier.focusRequester(playFocus),
+                Button(enabled = ready, modifier = Modifier.focusRequester(playFocus).tvFocusFeedback(),
                     shape = RoundedCornerShape(12.dp),
                     onClick = { fullscreen = true; web?.evaluateJavascript("if(window.player)player.playVideo();", null) }) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp)); Text("Reproduzir em tela cheia")
                 }
-                OutlinedButton(enabled = ready, shape = RoundedCornerShape(12.dp), onClick = { web?.evaluateJavascript("if(window.player)player.pauseVideo();", null) }) {
+                OutlinedButton(modifier = Modifier.tvFocusFeedback(), enabled = ready, shape = RoundedCornerShape(12.dp), onClick = { web?.evaluateJavascript("if(window.player)player.pauseVideo();", null) }) {
                     Icon(Icons.Filled.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp)); Text("Pausar")
                 }
-                OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { retry++ }) {
+                OutlinedButton(modifier = Modifier.tvFocusFeedback(), shape = RoundedCornerShape(12.dp), onClick = { retry++ }) {
                     Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp)); Text("Tentar novamente")
                 }
@@ -293,11 +302,11 @@ fun OnlineScreen(repository: OnlineRepository, scoreRepository: ScoreRepository,
             .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(16.dp)).padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button(modifier = Modifier.focusRequester(overlayFocus), onClick = { web?.evaluateJavascript("if(window.player){if(player.getPlayerState()===1)player.pauseVideo();else player.playVideo();}", null) }) {
+            Button(modifier = Modifier.focusRequester(overlayFocus).tvFocusFeedback(), onClick = { web?.evaluateJavascript("if(window.player){if(player.getPlayerState()===1)player.pauseVideo();else player.playVideo();}", null) }) {
                 Text("Reproduzir / Pausar")
             }
-            OutlinedButton(onClick = { showControls = false; focusControls(fullscreenFocus) }) { Text("Ocultar controles") }
-            OutlinedButton(onClick = { fullscreen = false; showControls = false }) { Text("Sair da tela cheia") }
+            OutlinedButton(modifier = Modifier.tvFocusFeedback(), onClick = { showControls = false; focusControls(fullscreenFocus) }) { Text("Ocultar controles") }
+            OutlinedButton(modifier = Modifier.tvFocusFeedback(), onClick = { fullscreen = false; showControls = false }) { Text("Sair da tela cheia") }
         }
     }
     }

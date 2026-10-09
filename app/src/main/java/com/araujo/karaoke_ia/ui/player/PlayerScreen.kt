@@ -46,6 +46,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -57,6 +58,7 @@ import com.araujo.karaoke_ia.ui.theme.*
 import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.ui.components.MusicArtwork
 import com.araujo.karaoke_ia.ui.components.stageBackground
+import com.araujo.karaoke_ia.ui.components.tvFocusFeedback
 import kotlinx.coroutines.delay
 
 @Composable
@@ -71,7 +73,7 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    val isTv = configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+    val isTv = com.araujo.karaoke_ia.ui.components.usesTvNavigation(context, configuration)
     val musicFile by viewModel.musicFile
     val error by viewModel.error
 
@@ -97,6 +99,7 @@ fun PlayerScreen(
                 Spacer(modifier = Modifier.height(32.dp))
                 Box(
                     modifier = Modifier
+                        .tvFocusFeedback()
                         .clip(RoundedCornerShape(14.dp))
                         .background(GoldPrimary)
                         .clickable { onBack() }
@@ -153,7 +156,12 @@ fun PlayerScreen(
                 }
             }
         }
-        ExoPlayer.Builder(context, renderersFactory).build().apply {
+        // Local files need a small startup buffer; cap memory for low-end TV boxes.
+        val localLoadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(5000, 10000, 250, 500)
+            .setTargetBufferBytes(12 * 1024 * 1024)
+            .build()
+        ExoPlayer.Builder(context, renderersFactory).setLoadControl(localLoadControl).build().apply {
             val mediaItem = MediaItem.fromUri(mediaPath)
             setMediaItem(mediaItem)
             seekTo(savedPosition)
@@ -464,12 +472,12 @@ fun PlayerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(message, color = TextWhite, modifier = Modifier.widthIn(max = 420.dp))
                 androidx.compose.material3.Button(
-                    modifier = Modifier.focusRequester(playbackRetryFocusRequester),
+                    modifier = Modifier.focusRequester(playbackRetryFocusRequester).tvFocusFeedback(),
                     onClick = { playbackError = null; exoPlayer.prepare(); exoPlayer.play() }
                 ) {
                     androidx.compose.material3.Text("Tentar novamente")
                 }
-                androidx.compose.material3.Button(onClick = onBack) { androidx.compose.material3.Text("Voltar") }
+                androidx.compose.material3.Button(modifier = Modifier.tvFocusFeedback(), onClick = onBack) { androidx.compose.material3.Text("Voltar") }
             }
         }
     }
@@ -501,6 +509,7 @@ private fun PlayerControlButton(
     Box(
         modifier = modifier
             .heightIn(min = 48.dp)
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(14.dp))
             .background(bgBrush)
             .border(if (isFocused) 2.5.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))

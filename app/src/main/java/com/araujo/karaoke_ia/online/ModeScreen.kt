@@ -1,6 +1,8 @@
 ﻿package com.araujo.karaoke_ia.online
 
 import androidx.compose.foundation.background
+import com.araujo.karaoke_ia.ui.components.BrandMark
+import com.araujo.karaoke_ia.ui.components.tvFocusFeedback
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -48,11 +50,11 @@ fun ModeScreen(onOffline: () -> Unit, onOnline: () -> Unit) {
             .padding(horizontal = if (wide) 48.dp * scale else 24.dp, vertical = 28.dp * scale),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center) {
-            Box(Modifier.size(56.dp * scale).background(ModePink, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp * scale))
+            Box(Modifier.size(56.dp * scale), contentAlignment = Alignment.Center) {
+                BrandMark(Modifier.size(48.dp * scale))
             }
             Spacer(Modifier.height(18.dp * scale))
-            Text("KARAOKÊ", fontFamily = ReferenceHeadingFont, fontSize = (20f * scale).sp, color = ModeWhite)
+            Text("SoltaVoz", fontFamily = ReferenceHeadingFont, fontSize = (20f * scale).sp, color = ModeWhite)
             Spacer(Modifier.height(26.dp * scale))
             Text("Como você quer cantar?", fontFamily = ReferenceHeadingFont,
                 fontSize = (if (wide) 48f * scale else 28f).sp, lineHeight = (if (wide) 60f * scale else 38f).sp,
@@ -86,7 +88,7 @@ private fun ModeCard(title: String, description: String, action: String, icon: I
     online: Boolean, scale: Float, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp * scale)
-    Surface(onClick = onClick, modifier = modifier.onFocusChanged { focused = it.hasFocus }
+    Surface(onClick = onClick, modifier = modifier.tvFocusFeedback().onFocusChanged { focused = it.hasFocus }
         .clip(shape).border(if (focused) 2.dp else 1.dp,
             if (focused || online) ModePink.copy(alpha = if (focused) 1f else 0.6f) else Color(0xFF27232F), shape),
         shape = shape, color = if (online) Color(0xFF1D0615) else Color(0xFF0D0B14)) {

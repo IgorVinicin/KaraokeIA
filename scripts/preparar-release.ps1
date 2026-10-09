@@ -36,7 +36,7 @@ if (-not ($badging -match "package: name='com.araujo.karaoke_ia'")) { throw 'Pac
 if ($LASTEXITCODE -ne 0) { throw 'Verificacao de arquivos privados no APK falhou.' }
 $distPath = Join-Path $projectRoot 'dist'
 New-Item -ItemType Directory -Path $distPath -Force | Out-Null
-$outputPath = Join-Path $distPath 'KaraokeIA-release.apk'
+$outputPath = Join-Path $distPath 'SoltaVoz-release.apk'
 Copy-Item -LiteralPath $apkPath -Destination $outputPath -Force
 $mappingPath = Join-Path $projectRoot 'app/build/outputs/mapping/release/mapping.txt'
 if (Test-Path -LiteralPath $mappingPath) {
@@ -45,6 +45,6 @@ if (Test-Path -LiteralPath $mappingPath) {
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TESTAR_NA_TVBOX.md') -Destination (Join-Path $distPath 'LEIA-ME.md') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/producao.md') -Destination (Join-Path $distPath 'producao.md') -Force
 $hash = (Get-FileHash -LiteralPath $outputPath -Algorithm SHA256).Hash
-Set-Content -LiteralPath (Join-Path $distPath 'KaraokeIA-release.sha256') -Value "$hash  KaraokeIA-release.apk" -Encoding ASCII
+Set-Content -LiteralPath (Join-Path $distPath 'SoltaVoz-release.sha256') -Value "$hash  SoltaVoz-release.apk" -Encoding ASCII
 Write-Host "Release assinada e verificada: $outputPath"
 Write-Host "SHA256: $hash"

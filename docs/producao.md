@@ -1,6 +1,6 @@
 # Release para TV Box
 
-A versão 1.0.1 (versionCode 2) utiliza assinatura de produção própria, R8 e redução de recursos. A ponte JavaScript do player YouTube permanece preservada em app/proguard-rules.pro.
+A versão atual do código é SoltaVoz 1.3.0 (versionCode 5), com login e autorização offline assinada. A release utiliza assinatura de produção própria, R8 e redução de recursos. A ponte JavaScript do player YouTube permanece preservada em app/proguard-rules.pro. O APK antigo `dist/KaraokeIA-release.apk` é 1.0.1; não confunda com a release atual, que só pode ser gerada com o certificado original.
 
 Pacote: com.araujo.karaoke_ia. Android mínimo: 6.0 (API 23). Compile/target SDK: 35. O APK não inclui bibliotecas nativas próprias nem limita uma arquitetura de CPU; os codecs disponíveis dependem do Android da TV Box.
 
@@ -14,8 +14,8 @@ Requisitos locais: SDK Android, JDK 17 e Python 3. Neste computador o JDK está 
 
 O helper compila assembleRelease, executa lintRelease, verifica assinatura com apksigner, confere pacote e ausência de debuggable com aapt, verifica arquivos privados/chave local no APK e copia o resultado para:
 
-- dist/KaraokeIA-release.apk
-- dist/KaraokeIA-release.sha256
+- dist/SoltaVoz-release.apk
+- dist/SoltaVoz-release.sha256
 
 O APK original fica em app/build/outputs/apk/release/app-release.apk. Build de release sem assinatura configurada é rejeitada; debug continua disponível separadamente. Consulte VALIDACAO_EM_CASA.md para os resultados executados.
 
@@ -29,7 +29,7 @@ Uma instalação debug anterior usa outra assinatura. Se o Android rejeitar a at
 
 ## Configuração do YouTube em release
 
-O .env do computador não acompanha o APK. Na TV Box, escolha Online → Configurações → Configurar pesquisa por nome, informe apenas o valor de YOUTUBE_KEY e salve. O campo é mascarado; a configuração fica na área privada no_backup. É possível removê-la pelo mesmo painel. Links funcionam sem essa configuração.
+O `.env` do computador não acompanha o APK. Para distribuição, publique o [servidor de pesquisa](../server/README.md) e configure somente sua URL pública em `SOLTAVOZ_SEARCH_URL` antes da compilação. A chave do YouTube fica no servidor. A biblioteca unificada consulta o serviço quando não encontra músicas locais. Sem URL de serviço, Configurações → Configurar pesquisa do YouTube permite uso pessoal; o campo é mascarado e salvo na área privada `no_backup`.
 
 O script configurar-youtube.ps1 continua exclusivo do debug. Não é necessário run-as no release. Configure a YouTube Data API e a cota da sua chave no Google Cloud. Provisionamento central de vários clientes por backend com autenticação e controle de cota é uma etapa separada.
 

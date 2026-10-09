@@ -29,4 +29,10 @@ class HistoryRepository(private val context: Context) {
         val trimmed = current.take(MAX_HISTORY)
         prefs.edit().putString(KEY_HISTORY, trimmed.joinToString(",")).apply()
     }
+
+    fun importLegacyYouTube(codes: List<String>) {
+        if (prefs.getBoolean("youtube_imported", false)) return
+        prefs.edit().putString(KEY_HISTORY, (getHistory() + codes).distinct().take(MAX_HISTORY).joinToString(","))
+            .putBoolean("youtube_imported", true).apply()
+    }
 }

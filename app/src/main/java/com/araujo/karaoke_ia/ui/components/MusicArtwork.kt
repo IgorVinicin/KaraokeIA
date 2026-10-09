@@ -23,11 +23,19 @@ import java.io.File
 
 @Composable
 fun MusicArtwork(music: MusicFile, repository: ArtworkRepository, modifier: Modifier = Modifier) {
+    if (music.isOnline) {
+        Box(modifier.background(DarkCardElevated)) {
+            ArtworkPlaceholder(music.artist)
+            AsyncImage(model = "https://i.ytimg.com/vi/${music.code.removePrefix("youtube:")}/hqdefault.jpg",
+                contentDescription = "Capa de ${music.title}", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        return
+    }
     val file by produceState<File?>(null, music.title, music.artist, repository) {
-        value = repository.getThumbnailFile(music, edge = 256)
+        value = repository.getThumbnailFile(music, edge = 256, searchOnline = false)
     }
     Box(modifier.background(DarkCardElevated), contentAlignment = Alignment.Center) {
-        Icon(Icons.Default.MusicNote, contentDescription = null, tint = TextMuted, modifier = Modifier.size(24.dp))
+        ArtworkPlaceholder(music.artist)
         file?.let {
             AsyncImage(model = it, contentDescription = "Capa de ${music.title}",
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

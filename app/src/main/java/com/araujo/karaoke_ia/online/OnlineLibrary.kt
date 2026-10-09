@@ -1,7 +1,9 @@
 package com.araujo.karaoke_ia.online
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateDpAsState
+import com.araujo.karaoke_ia.ui.components.tvFocusFeedback
+import com.araujo.karaoke_ia.ui.components.BrandMark
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +33,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -63,11 +66,7 @@ private enum class OnlinePanel(val label: String, val icon: ImageVector) {
     QUEUE("Fila", Icons.Outlined.QueueMusic), SETTINGS("Configurações", Icons.Outlined.Settings)
 }
 
-private fun Modifier.onlineFocus(): Modifier = composed {
-    var focused by remember { mutableStateOf(false) }
-    onFocusChanged { focused = it.isFocused }
-        .border(if(focused) 2.dp else 0.dp, if(focused) GoldGlow else Color.Transparent, RoundedCornerShape(12.dp))
-}
+private fun Modifier.onlineFocus(): Modifier = tvFocusFeedback()
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -95,8 +94,7 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
     var restoreCoverFocus by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
-    val isTv = LocalConfiguration.current.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
-        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    val isTv = com.araujo.karaoke_ia.ui.components.usesTvNavigation(LocalContext.current, LocalConfiguration.current)
     val completedPerformances = remember { scores.getAllScores() }
     val playCounts = remember(completedPerformances) {
         completedPerformances.filter { it.musicCode.startsWith("youtube:") }
@@ -141,9 +139,9 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
             val compact = maxWidth < 650.dp
             val branding: @Composable () -> Unit = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Outlined.Mic, null, Modifier.size(34.dp), tint = GoldPrimary)
+                    BrandMark(Modifier.size(36.dp))
                     Column {
-                        Text("PALCO ONLINE", fontFamily = ReferenceHeadingFont, color = GoldPrimary,
+                        Text("SoltaVoz", fontFamily = ReferenceHeadingFont, color = GoldPrimary,
                             fontSize = if(compact) 20.sp else 18.sp)
                         Text("K A R A O K \u00ca   C L U B", color = TextMuted, fontSize = 9.sp)
                         Text("YouTube \u00b7 ${queue.size} na fila", color = TextMuted, fontSize = 10.sp)
@@ -159,6 +157,7 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                         var focused by remember { mutableStateOf(false) }
                         Column(Modifier.then(if(item == panel) Modifier.focusRequester(menuFocus) else Modifier)
                             .onFocusChanged { focused = it.isFocused }
+                            .onlineFocus()
                             .clip(RoundedCornerShape(10.dp))
                             .background(if(item == panel || focused) GoldBadgeBg else Color.Transparent)
                             .border(if(focused) 2.dp else 1.dp, if(item == panel || focused) GoldPrimary else Color.Transparent, RoundedCornerShape(10.dp))
@@ -185,7 +184,7 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
         }
 
         if(panel == OnlinePanel.SEARCH) {
-            OutlinedTextField(query, { query = it.take(500) }, Modifier.fillMaxWidth().onlineFocus()
+            OutlinedTextField(query, { query = it.take(160) }, Modifier.fillMaxWidth().onlineFocus()
                 .onPreviewKeyEvent { event ->
                     if (!isTv || event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { focusManager.moveFocus(FocusDirection.Up); true }
@@ -193,18 +192,22 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                         else -> false
                     }
                 },
-                label = { Text(if(searchConfigured) "Música, artista ou link do YouTube" else "Link do vídeo do YouTube") },
+                label = { Text("Nome da música ou artista") },
+                placeholder = { Text("Ex.: Evidências, Chitãozinho e Xororó") },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) }, singleLine = true, shape = RoundedCornerShape(12.dp))
             Button(modifier = Modifier.onlineFocus(), enabled = !busy && query.isNotBlank(), onClick = {
                 busy = true; onMessage(null)
                 scope.launch {
                     try {
-                        results = if(!searchConfigured || OnlineRepository.parseVideoId(query) != null)
+                        results = if(OnlineRepository.isVideoLink(query))
                             listOf(repository.fromLink(query)) else repository.search(query)
                         activeId = results.firstOrNull()?.videoId
                         if(results.isEmpty()) onMessage("Nenhum vídeo encontrado. Tente outra busca.")
                     } catch(cancelled: CancellationException) { throw cancelled }
-                    catch(error: Exception) { onMessage(error.message ?: "Não foi possível buscar vídeos.") }
+                    catch(error: Exception) {
+                        onMessage(error.message ?: "Não foi possível buscar vídeos.")
+                        if (!searchConfigured && !OnlineRepository.isVideoLink(query)) showSearchConfiguration = true
+                    }
                     finally { busy = false }
                 }
             }) { Text(if(busy) "Buscando…" else "Buscar músicas") }
@@ -281,8 +284,8 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Configurações da sessão", color=TextWhite, fontSize=22.sp, fontFamily=ReferenceHeadingFont)
-                Text(if(searchConfigured) "Pesquisa por nome disponível neste dispositivo." else "Pesquisa por link disponível. A pesquisa por nome requer a configuração do YouTube.", color=TextMuted)
-                OutlinedButton(modifier = Modifier.onlineFocus(), onClick = {
+                Text(if(searchConfigured) "Pesquisa por nome disponível neste dispositivo." else "Configure a pesquisa por nome neste aparelho para encontrar versões de karaokê no YouTube.", color=TextMuted)
+                if (!repository.usesSearchService) OutlinedButton(modifier = Modifier.onlineFocus(), onClick = {
                     searchKeyInput = ""; searchKeyError = null; showSearchConfiguration = true
                 }) { Text(if(searchConfigured) "Configurar pesquisa / remover chave" else "Configurar pesquisa por nome") }
                 Text("Pontuação recreativa · 1º: 96–100 · 2º: 90–95 · 3º: 87–89", color=TextMuted)
@@ -298,7 +301,7 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                         FilterChip(modifier = Modifier.onlineFocus(), selected=filter==category, onClick={filter=category;activeId=null}, label={Text(category)})
                     }
                 }
-                if(songs.isEmpty()) EmptyLibrary(if(panel==OnlinePanel.SEARCH) "Pesquise uma música ou cole um link para montar seu palco." else "Seu palco começa com as músicas que você escolher.") { panelName=OnlinePanel.SEARCH.name }
+                if(songs.isEmpty()) EmptyLibrary(if(panel==OnlinePanel.SEARCH) "Pesquise pelo nome da música ou artista para encontrar seu karaokê." else "Seu palco começa com as músicas que você escolher.") { panelName=OnlinePanel.SEARCH.name }
                 else {
                     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                         val coverHeight = (maxHeight * .76f).coerceIn(100.dp, 225.dp)
@@ -306,13 +309,15 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                             horizontalArrangement=Arrangement.spacedBy(12.dp), contentPadding=PaddingValues(horizontal=4.dp)) {
                             items(songs, key={it.videoId}) { song ->
                                 val selected = current?.videoId==song.videoId
-                                val height by animateDpAsState(if(selected) coverHeight else coverHeight*.77f, animationSpec = tween(150), label="coverSize")
+                                val scale by animateFloatAsState(if(selected) 1f else .86f, tween(150), label="onlineCoverScale")
                                 var focused by remember { mutableStateOf(false) }
-                                OnlineCover(song, Modifier.height(height).width(height*.84f)
+                                OnlineCover(song, Modifier.height(coverHeight).width(coverHeight*.84f)
+                                    .graphicsLayer { scaleX = scale; scaleY = scale }
                                     .then(if(selected) Modifier.focusRequester(coverFocus) else Modifier)
                                     .onFocusChanged { focused=it.isFocused; if(it.isFocused) activeId=song.videoId }
+                                    .onlineFocus()
                                     .border(if(selected || focused) 2.dp else 1.dp, if(selected || focused) GoldPrimary else DarkCardBorder, RoundedCornerShape(12.dp))
-                                    .clickable { activeId=song.videoId })
+                                    .clickable { activeId=song.videoId; restoreCoverFocus = true; onPlay(song) })
                             }
                         }
                     }
@@ -334,7 +339,7 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
             Text("OK  Selecionar     ·     Voltar  Retornar", color=TextMuted, fontSize=10.sp)
-            Text("PALCO ONLINE", color=TextSubtle, fontSize=10.sp)
+            Text("SoltaVoz", color=TextSubtle, fontSize=10.sp)
         }
     }
     if(showSearchConfiguration) {
@@ -365,8 +370,8 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
             text = {
                 Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Opcional: informe uma chave da YouTube Data API para buscar músicas e artistas. Sem chave, use links de vídeos.")
-                    Text("A chave fica privada neste aparelho, fora dos backups.")
+                    Text("Para uso pessoal, configure a chave neste aparelho. Para distribuir o app, configure o servidor de pesquisa antes de compilar o APK.")
+                    Text("A chave fica no armazenamento privado deste aparelho, fora do APK e dos backups. Não é necessário compilar uma .env no app.")
                     OutlinedTextField(searchKeyInput, { searchKeyInput = it.take(256); searchKeyError = null },
                         modifier = Modifier.fillMaxWidth().onlineFocus().onPreviewKeyEvent { event ->
                             if(!isTv || event.type != KeyEventType.KeyDown) false else when(event.key) {
@@ -391,7 +396,7 @@ internal fun OnlineLibrary(repository: OnlineRepository, scores: ScoreRepository
                     Text(if(savingSearchKey) "Salvando…" else "Salvar")
                 }
             },
-            dismissButton = { TextButton(enabled = !savingSearchKey, onClick = { dismissConfiguration() }) { Text("Cancelar") } }
+            dismissButton = { TextButton(modifier = Modifier.onlineFocus(), enabled = !savingSearchKey, onClick = { dismissConfiguration() }) { Text("Cancelar") } }
         )
     }
 }

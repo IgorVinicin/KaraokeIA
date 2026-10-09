@@ -39,6 +39,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.araujo.karaoke_ia.ui.components.stageBackground
+import com.araujo.karaoke_ia.ui.components.tvFocusFeedback
+import com.araujo.karaoke_ia.ui.components.BrandMark
+import com.araujo.karaoke_ia.ui.components.ArtworkPlaceholder
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -92,15 +95,22 @@ private fun Modifier.tvSearchFocusNavigation(): Modifier {
 fun HomeScreen(
     onNavigateToPlayer: (String) -> Unit,
     viewModel: HomeViewModel,
-    onModes: () -> Unit = {}
+    onStorageAccess: () -> Unit = {},
+    searchSettings: @Composable () -> Unit = {}
 ) {
+    val refreshOwner = LocalLifecycleOwner.current
+    LaunchedEffect(refreshOwner) {
+        refreshOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.refreshLibrary()
+            awaitCancellation()
+        }
+    }
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val isTelevision = configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
-        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    val isTelevision = com.araujo.karaoke_ia.ui.components.usesTvNavigation(LocalContext.current, configuration)
     if (!isTelevision) {
         CompositionLocalProvider(LocalArtworkRepository provides viewModel.artworkRepository,
             LocalArtworkRevision provides viewModel.artworkRevision.value) {
-            MobileHomeScreen(viewModel, onNavigateToPlayer, onModes)
+            MobileHomeScreen(viewModel, onNavigateToPlayer, onStorageAccess, searchSettings)
         }
         return
     }
@@ -239,13 +249,14 @@ fun HomeScreen(
                                 PillTabItem("Hist\u00f3rico", Icons.Default.History, false,
                                     onClick = { viewModel.onTabSelected(HomeTab.INICIO) })
                                 PillTabItem("Atualizar cat\u00e1logo", Icons.Default.Refresh, false,
-                                    onClick = { viewModel.loadAllMusics() })
+                                    onClick = { viewModel.loadAllMusics(forceRefresh = true) })
                                 PillTabItem("Buscar capas", Icons.Default.Image, false,
                                     onClick = { viewModel.fetchMissingArtwork() })
                             }
                             artworkBatchProgress?.let { Text("Capas: ${it.completed}/${it.total}", color = TextMuted) }
-                            PillTabItem("Trocar modo online / offline", Icons.Default.SwapHoriz, false,
-                                onClick = onModes)
+                            PillTabItem("Acessar músicas do aparelho", Icons.Default.Usb, false,
+                                onClick = onStorageAccess)
+                            searchSettings()
                         }
                     }
 
@@ -262,10 +273,10 @@ fun HomeScreen(
                         }
                     }
 
-                    loadError != null && allMusics.isEmpty() -> {
+                    loadError != null && allMusics.isEmpty() && historyMusics.isEmpty() && selectedTab == HomeTab.INICIO -> {
                         ErrorView(
-                            message = loadError!!,
-                            onRetry = { viewModel.loadAllMusics() }
+                            message = "Pesquise pelo nome para buscar seu karaokê ou conecte suas músicas locais.",
+                            onRetry = { viewModel.onTabSelected(HomeTab.PESQUISAR) }
                         )
                     }
 
@@ -273,11 +284,7 @@ fun HomeScreen(
                         HomeDashboardView(
                             musics = allMusics,
                             recentMusics = historyMusics,
-                            queueCount = queueCodes.size,
-                            myBestScores = myBestScores,
                             onMusicClick = { onNavigateToPlayer(it.code) },
-                            onGoToQueue = { viewModel.onTabSelected(HomeTab.FILA) },
-                            onGoToRanking = { viewModel.onTabSelected(HomeTab.RANKING) },
                             favoriteCodes = favorites,
                             queueCodes = queueCodes,
                             onFavorite = { viewModel.toggleFavorite(it) },
@@ -302,6 +309,10 @@ fun HomeScreen(
                     selectedTab == HomeTab.PESQUISAR -> {
                         SongSearchView(
                             query = searchQuery,
+                            searchStatus = viewModel.searchStatus.value,
+                            isSearching = viewModel.isSearching.value,
+                            onRetrySearch = { viewModel.onSearchQueryChange(searchQuery) },
+                            onSearchSettings = { viewModel.onTabSelected(HomeTab.CONFIGURACOES) },
                             onQueryChange = { viewModel.onSearchQueryChange(it) },
                             results = filteredMusics,
                             featuredMusic = selectedSearchMusic ?: filteredMusics.firstOrNull(),
@@ -374,10 +385,9 @@ private fun PillNavigationBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 18.dp)) {
-                Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White,
-                    modifier = Modifier.size(28.dp).clip(CircleShape).background(GoldPrimary).padding(6.dp))
+                BrandMark(Modifier.size(32.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("KARAOKÊ", fontSize = 15.sp, fontFamily = ReferenceHeadingFont,
+                Text("SoltaVoz", fontSize = 15.sp, fontFamily = ReferenceHeadingFont,
                     fontWeight = FontWeight.Black, color = TextWhite)
             }
             PillTabItem(
@@ -462,10 +472,10 @@ private fun PillTabItem(
     Column(
         modifier = Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(10.dp))
             .background(bgBrush)
             .border(if (isFocused) 1.dp else 0.dp, if (isFocused) GoldGlow else Color.Transparent, RoundedCornerShape(10.dp))
-            .focusable(interactionSource = interactionSource)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -504,18 +514,17 @@ private fun PillTabItem(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun HomeDashboardView(
-    musics: List<MusicFile>, recentMusics: List<MusicFile>, queueCount: Int,
-    myBestScores: List<UserScoreEntry>, onMusicClick: (MusicFile) -> Unit,
-    onGoToQueue: () -> Unit, onGoToRanking: () -> Unit,
+    musics: List<MusicFile>, recentMusics: List<MusicFile>,
+    onMusicClick: (MusicFile) -> Unit,
     favoriteCodes: Set<String>, queueCodes: List<String>,
     onFavorite: (String) -> Unit, onQueue: (String) -> Unit,
     selectedCoverFocusRequester: FocusRequester
 ) {
-    val dashboardMusics = remember(musics) { musics.take(30) }
+    val dashboardMusics = remember(musics, recentMusics) { musics.ifEmpty { recentMusics }.take(30) }
     var selectedCode by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = dashboardMusics.firstOrNull { it.code == selectedCode } ?: dashboardMusics.firstOrNull()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("SEU PALCO · CATÁLOGO LOCAL", color = TextMuted, fontSize = 10.sp, letterSpacing = 2.sp)
+        Text("SEU PALCO · MÚSICAS DO APARELHO E YOUTUBE", color = TextMuted, fontSize = 10.sp, letterSpacing = 2.sp)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 12.dp, horizontal = 8.dp)) {
             items(dashboardMusics, key = { it.code }) { song ->
                 val interaction = remember { MutableInteractionSource() }
@@ -526,19 +535,20 @@ private fun HomeDashboardView(
                     .then(if (selected?.code == song.code) Modifier.focusRequester(selectedCoverFocusRequester) else Modifier)
                     .graphicsLayer { scaleX = scale; scaleY = scale }
                     .onFocusChanged { if (it.isFocused) selectedCode = song.code }
+                    .tvFocusFeedback()
                     .clip(RoundedCornerShape(10.dp))
                     .border(if (focused || selected?.code == song.code) 2.dp else 1.dp,
                         if (focused || selected?.code == song.code) GoldPrimary else DarkCardBorder, RoundedCornerShape(10.dp))
-                    .clickable(interactionSource = interaction, indication = null) { selectedCode = song.code }
+                    .clickable(interactionSource = interaction, indication = null) { selectedCode = song.code; onMusicClick(song) }
                 ) {
-                    SongAlbumArt(song.code, song.title, song.artist, searchForArtwork = true, modifier = Modifier.fillMaxSize())
+                    SongAlbumArt(song.code, song.title, song.artist, searchForArtwork = false, modifier = Modifier.fillMaxSize())
                 }
             }
         }
         selected?.let { song ->
             Text(song.title, color = TextWhite, fontFamily = ReferenceHeadingFont, fontWeight = FontWeight.Bold,
                 fontSize = 26.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist, color = TextMuted, fontFamily = ReferenceBodyFont, fontSize = 17.sp,
+            Text("${song.artist} · ${song.sourceLabel}", color = TextMuted, fontFamily = ReferenceBodyFont, fontSize = 17.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 HeroActionButton("Cantar agora", true) { onMusicClick(song) }
@@ -557,16 +567,7 @@ private fun HomeDashboardView(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeader("Minha fila")
-                QueueSummaryWidget(queueCount, onGoToQueue)
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeader("Minhas melhores pontuações")
-                MyScoresSummaryWidget(myBestScores.take(4), onGoToRanking)
-            }
-        }
+
     }
 }
 
@@ -582,6 +583,7 @@ private fun HeroActionButton(
 
     Row(
         modifier = Modifier
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(24.dp))
             .background(
                 if (highlighted) Brush.horizontalGradient(listOf(GoldPrimary, GoldAccent))
@@ -592,7 +594,6 @@ private fun HeroActionButton(
                 color = if (highlighted) GoldGlow else Color(0x55FFFFFF),
                 shape = RoundedCornerShape(24.dp)
             )
-            .focusable(interactionSource = interactionSource)
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 15.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -659,6 +660,7 @@ private fun PaginationControls(
 private fun PaginationButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(8.dp))
             .background(if (enabled) BronzeGradient1.copy(alpha = 0.55f) else Color(0x22141722))
             .border(1.dp, if (enabled) GoldBadgeBorder else Color(0x22141722), RoundedCornerShape(8.dp))
@@ -684,7 +686,7 @@ private fun SongCardItem(
     Column(
         modifier = Modifier
             .width(135.dp)
-            .focusable(interactionSource = interactionSource)
+            .tvFocusFeedback()
             .clickable(interactionSource = interactionSource, indication = null) { onClick() },
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -703,7 +705,7 @@ private fun SongCardItem(
                 code = music.code,
                 title = music.title,
                 artist = music.artist,
-                searchForArtwork = true,
+                searchForArtwork = false,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -734,7 +736,7 @@ private fun SongCardItem(
 
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "${music.code} | ${music.title}",
+                text = "${music.displayCode} | ${music.title}",
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isFocused) GoldPrimary else TextWhite,
@@ -743,7 +745,7 @@ private fun SongCardItem(
             )
 
             Text(
-                text = music.artist,
+                text = "${music.artist} · ${music.sourceLabel}",
                 fontSize = 11.sp,
                 color = TextMuted,
                 maxLines = 1,
@@ -764,6 +766,16 @@ fun SongAlbumArt(
     searchForArtwork: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    if (code.startsWith("youtube:")) {
+        val id = code.removePrefix("youtube:")
+        Box(modifier.background(DarkCardElevated)) {
+            ArtworkPlaceholder(artist)
+            if (com.araujo.karaoke_ia.online.OnlineRepository.validId(id)) AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data("https://i.ytimg.com/vi/$id/hqdefault.jpg").size(256, 256).crossfade(false).build(),
+                contentDescription = "Capa do YouTube: $title", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        return
+    }
     val repository = LocalArtworkRepository.current
     val artworkRevision = LocalArtworkRevision.current
     val context = LocalContext.current
@@ -782,8 +794,7 @@ fun SongAlbumArt(
         modifier = modifier.background(DarkCardElevated),
         contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Default.MusicNote, contentDescription = null, tint = TextMuted,
-            modifier = Modifier.size(28.dp))
+        ArtworkPlaceholder(artist)
 
         artworkPath?.let { path ->
             AsyncImage(
@@ -799,181 +810,13 @@ fun SongAlbumArt(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  6. WIDGETS DA COLUNA DIREITA
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun QueueSummaryWidget(
-    queueCount: Int,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.horizontalGradient(
-                    if (isFocused) listOf(BronzeGradient1, GoldDark)
-                    else listOf(BronzeGradient1.copy(alpha = 0.7f), BronzeGradient2)
-                )
-            )
-            .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) GoldPrimary else BronzeBorder,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .focusable(interactionSource = interactionSource)
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
-            .padding(13.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = if (queueCount > 0) "${queueCount.toString().padStart(2, '0')}" else "00",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Black,
-                    color = GoldPrimary
-                )
-
-                Column {
-                    Text(
-                        text = "MÚSICAS NA FILA",
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = GoldAccent
-                    )
-                    Text(
-                        text = if (queueCount > 0) "Pronto para tocar" else "Fila vazia",
-                        fontSize = 11.5.sp,
-                        color = TextMuted
-                    )
-                }
-            }
-
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Ver fila",
-                tint = GoldPrimary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun MyScoresSummaryWidget(
-    scores: List<UserScoreEntry>,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0x33141722))
-            .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) GoldPrimary else Color(0x22FFFFFF),
-                shape = RoundedCornerShape(16.dp)
-            )
-            .focusable(interactionSource = interactionSource)
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (scores.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Nenhuma pontuação gravada ainda.\nCante para registrar suas notas!",
-                    fontSize = 11.5.sp,
-                    textAlign = TextAlign.Center,
-                    color = TextMuted
-                )
-            }
-        } else {
-            scores.forEachIndexed { index, entry ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (index < 3 && entry.photoPath != null) {
-                            SingerPhoto(entry.photoPath, Modifier.size(34.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (index == 0) GoldBadgeBg else DarkCardElevated),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${index + 1}º",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (index == 0) GoldPrimary else TextMuted
-                            )
-                        }
-
-                        Column {
-                            Text(
-                                text = "${entry.score} pts • ${entry.title}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextWhite,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = entry.artist,
-                                fontSize = 10.sp,
-                                color = TextSubtle,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = TextSubtle,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  7. SONG SEARCH VIEW
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SongSearchView(
     query: String,
+    searchStatus: String?,
+    isSearching: Boolean,
+    onRetrySearch: () -> Unit,
+    onSearchSettings: () -> Unit,
     onQueryChange: (String) -> Unit,
     results: List<MusicFile>,
     featuredMusic: MusicFile?,
@@ -1035,6 +878,15 @@ private fun SongSearchView(
                     },
                     modifier = Modifier.weight(1f).tvSearchFocusNavigation()
                 )
+            }
+        }
+
+        searchStatus?.let { Text(it, color = TextMuted, fontSize = 12.sp) }
+        if (isSearching) androidx.compose.material3.LinearProgressIndicator(color = GoldPrimary, modifier = Modifier.fillMaxWidth())
+        if (!isSearching && results.isEmpty() && query.trim().length >= 2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PillTabItem("Tentar novamente", Icons.Default.Refresh, false, onClick = onRetrySearch)
+                PillTabItem("Configurações", Icons.Default.Settings, false, onClick = onSearchSettings)
             }
         }
 
@@ -1130,7 +982,7 @@ private fun FeaturedSearchCard(
                 }
 
                 Text(
-                    text = music.code,
+                    text = music.displayCode,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Black,
                     color = GoldPrimary
@@ -1144,7 +996,7 @@ private fun FeaturedSearchCard(
                         color = TextWhite
                     )
                     Text(
-                        text = music.artist,
+                        text = "${music.artist} · ${music.sourceLabel}",
                         fontSize = 12.5.sp,
                         color = TextMuted
                     )
@@ -1157,6 +1009,7 @@ private fun FeaturedSearchCard(
             ) {
                 Box(
                     modifier = Modifier
+                        .tvFocusFeedback()
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             if (isQueueFocused) Brush.horizontalGradient(listOf(GoldAccent, GoldPrimary))
@@ -1167,7 +1020,6 @@ private fun FeaturedSearchCard(
                             color = if (isQueueFocused) GoldGlow else BronzeBorder,
                             shape = RoundedCornerShape(12.dp)
                         )
-                        .focusable(interactionSource = queueInteraction)
                         .clickable(interactionSource = queueInteraction, indication = null) { onQueue() }
                         .padding(horizontal = 14.dp, vertical = 9.dp)
                 ) {
@@ -1181,6 +1033,7 @@ private fun FeaturedSearchCard(
 
                 Box(
                     modifier = Modifier
+                        .tvFocusFeedback()
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             if (isCantarFocused) Brush.horizontalGradient(listOf(GoldGlow, GoldPrimary))
@@ -1191,7 +1044,6 @@ private fun FeaturedSearchCard(
                             color = GoldGlow,
                             shape = RoundedCornerShape(12.dp)
                         )
-                        .focusable(interactionSource = cantarInteraction)
                         .clickable(interactionSource = cantarInteraction, indication = null) { onCantar() }
                         .padding(horizontal = 18.dp, vertical = 9.dp)
                 ) {
@@ -1232,6 +1084,7 @@ private fun SearchResultItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(12.dp))
             .background(
                 if (isFocused) Color(0xFF222838)
@@ -1243,8 +1096,8 @@ private fun SearchResultItem(
                 color = if (isFocused) GoldPrimary else Color(0x1AFFFFFF),
                 shape = RoundedCornerShape(12.dp)
             )
-            .focusable(interactionSource = interactionSource)
-            .clickable(interactionSource = interactionSource, indication = null) { onSelect() }
+                        .onFocusChanged { if (it.isFocused) onSelect() }
+            .clickable(interactionSource = interactionSource, indication = null) { onCantar() }
             .padding(horizontal = 12.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1263,13 +1116,13 @@ private fun SearchResultItem(
                     code = music.code,
                     title = music.title,
                     artist = music.artist,
-                    searchForArtwork = true,
+                    searchForArtwork = false,
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
             Text(
-                text = music.code,
+                text = music.displayCode,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = GoldPrimary
@@ -1285,7 +1138,7 @@ private fun SearchResultItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = music.artist,
+                    text = "${music.artist} · ${music.sourceLabel}",
                     fontSize = 11.sp,
                     color = TextMuted,
                     maxLines = 1,
@@ -1297,7 +1150,7 @@ private fun SearchResultItem(
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(
                 onClick = onQueue,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.tvFocusFeedback().size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -1309,7 +1162,7 @@ private fun SearchResultItem(
 
             IconButton(
                 onClick = onCantar,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.tvFocusFeedback().size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
@@ -1360,6 +1213,7 @@ private fun QueueScreenView(
                     fontWeight = FontWeight.Bold,
                     color = HeartRed,
                     modifier = Modifier
+                        .tvFocusFeedback()
                         .clickable { onClearQueue() }
                         .padding(6.dp)
                 )
@@ -1415,7 +1269,7 @@ private fun QueueScreenView(
                                 color = GoldPrimary
                             )
                             Text(
-                                text = "${music.code} | ${music.title}",
+                                text = "${music.displayCode} | ${music.title}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextWhite
@@ -1759,12 +1613,13 @@ private fun FavoriteGridCard(
     onQueue: () -> Unit,
     onRemoveFavorite: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
+    var isFocused by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
+            .onFocusChanged { isFocused = it.hasFocus }
             .fillMaxWidth()
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(14.dp))
             .background(DarkCardSurface)
             .border(
@@ -1772,7 +1627,7 @@ private fun FavoriteGridCard(
                 color = if (isFocused) GoldPrimary else DarkCardBorder,
                 shape = RoundedCornerShape(14.dp)
             )
-            .focusable(interactionSource = interactionSource)
+            .clickable(onClick = onCantar)
             .padding(9.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1786,7 +1641,7 @@ private fun FavoriteGridCard(
                     code = music.code,
                     title = music.title,
                     artist = music.artist,
-                    searchForArtwork = true,
+                    searchForArtwork = false,
                     modifier = Modifier.fillMaxSize()
                 )
 
@@ -1795,6 +1650,7 @@ private fun FavoriteGridCard(
                         .align(Alignment.TopEnd)
                         .padding(5.dp)
                         .size(24.dp)
+                        .tvFocusFeedback()
                         .clip(CircleShape)
                         .background(Color(0x88000000))
                         .clickable { onRemoveFavorite() },
@@ -1810,7 +1666,7 @@ private fun FavoriteGridCard(
             }
 
             Text(
-                text = "${music.code} | ${music.title}",
+                text = "${music.displayCode} | ${music.title}",
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isFocused) GoldPrimary else TextWhite,
@@ -1819,7 +1675,7 @@ private fun FavoriteGridCard(
             )
 
             Text(
-                text = music.artist,
+                text = "${music.artist} · ${music.sourceLabel}",
                 fontSize = 11.sp,
                 color = TextMuted,
                 maxLines = 1,
@@ -1834,6 +1690,7 @@ private fun FavoriteGridCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .tvFocusFeedback()
                             .clip(RoundedCornerShape(8.dp))
                             .background(GoldPrimary)
                             .clickable { onCantar() }
@@ -1846,6 +1703,7 @@ private fun FavoriteGridCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .tvFocusFeedback()
                             .clip(RoundedCornerShape(8.dp))
                             .background(BronzeGradient1)
                             .clickable { onQueue() }
@@ -1898,10 +1756,10 @@ private fun CatalogView(
             val isBatchFocused by batchInteraction.collectIsFocusedAsState()
             Box(
                 modifier = Modifier
+                    .tvFocusFeedback()
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (isBatchFocused) GoldPrimary else BronzeGradient1)
                     .border(1.dp, if (isBatchFocused) GoldGlow else GoldBadgeBorder, RoundedCornerShape(10.dp))
-                    .focusable(interactionSource = batchInteraction)
                     .clickable(
                         interactionSource = batchInteraction,
                         indication = null,
@@ -1976,6 +1834,7 @@ private fun ArtistChip(
 
     Box(
         modifier = Modifier
+            .tvFocusFeedback()
             .clip(RoundedCornerShape(20.dp))
             .background(
                 if (isFocused) GoldPrimary
@@ -1987,7 +1846,6 @@ private fun ArtistChip(
                 color = if (isFocused || isSelected) GoldPrimary else Color(0x22FFFFFF),
                 shape = RoundedCornerShape(20.dp)
             )
-            .focusable(interactionSource = interactionSource)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .padding(horizontal = 13.dp, vertical = 6.dp)
     ) {
@@ -2110,13 +1968,14 @@ private fun ErrorView(
 
             Box(
                 modifier = Modifier
+                    .tvFocusFeedback()
                     .clip(RoundedCornerShape(12.dp))
                     .background(GoldPrimary)
                     .clickable { onRetry() }
                     .padding(horizontal = 22.dp, vertical = 9.dp)
             ) {
                 Text(
-                    text = "Tentar Novamente",
+                    text = "Pesquisar músicas",
                     fontWeight = FontWeight.Bold,
                     color = DarkCharcoalBg
                 )

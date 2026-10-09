@@ -32,4 +32,11 @@ local.properties
 !/dist/LEIA-ME.md
 !/dist/producao.md
 !/dist/release-summary.json
+!/dist/SoltaVoz-debug.apk
+!/dist/SoltaVoz-debug.apk.sha256
+!/dist/SoltaVoz-debug.sha256
 /release-*.log
+/build-solta-voz.log
+/supabase/.temp/
+/supabase/.branches/
+node_modules/

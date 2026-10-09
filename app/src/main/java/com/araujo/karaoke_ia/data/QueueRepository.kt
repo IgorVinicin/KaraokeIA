@@ -21,6 +21,12 @@ class QueueRepository(private val context: Context) {
         return raw.split(",").filter { it.isNotBlank() }
     }
 
+    @Synchronized fun importLegacyYouTube(codes: List<String>) {
+        if (prefs.getBoolean("youtube_imported", false)) return
+        prefs.edit().putString(KEY_QUEUE, (getQueue() + codes).joinToString(","))
+            .putBoolean("youtube_imported", true).apply()
+    }
+
     fun observeChanges(onChanged: () -> Unit): Closeable {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == KEY_QUEUE) onChanged()

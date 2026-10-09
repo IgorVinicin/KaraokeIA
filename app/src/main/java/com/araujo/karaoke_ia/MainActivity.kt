@@ -11,6 +11,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import com.araujo.karaoke_ia.auth.AccessGate
+import com.araujo.karaoke_ia.auth.AccessRepository
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
@@ -18,6 +22,9 @@ import com.araujo.karaoke_ia.data.ArtworkRepository
 import com.araujo.karaoke_ia.data.FavoritesRepository
 import com.araujo.karaoke_ia.data.HistoryRepository
 import com.araujo.karaoke_ia.data.MusicRepositoryImpl
+import com.araujo.karaoke_ia.data.MusicRepository
+import com.araujo.karaoke_ia.data.HybridMusicRepository
+import com.araujo.karaoke_ia.online.OnlineRepository
 import com.araujo.karaoke_ia.data.QueueRepository
 import com.araujo.karaoke_ia.data.ScoreRepository
 import com.araujo.karaoke_ia.data.StorageManager
@@ -28,7 +35,8 @@ import com.araujo.karaoke_ia.ui.theme.KaraokeIATheme
 class MainActivity : ComponentActivity() {
 
     private lateinit var storageManager: StorageManager
-    private lateinit var musicRepository: MusicRepositoryImpl
+    private lateinit var musicRepository: MusicRepository
+    private lateinit var onlineRepository: OnlineRepository
     private lateinit var favoritesRepository: FavoritesRepository
     private lateinit var historyRepository: HistoryRepository
     private lateinit var queueRepository: QueueRepository
@@ -36,6 +44,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var artworkRepository: ArtworkRepository
     private lateinit var remoteQueueServer: RemoteQueueServer
     private var hadStoragePermission = false
+    private lateinit var accessRepository: AccessRepository
 
     private val mediaReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -49,14 +58,17 @@ class MainActivity : ComponentActivity() {
 
         // Inicializa repositórios
         storageManager      = StorageManager(this)
-        musicRepository     = MusicRepositoryImpl(storageManager)
+        accessRepository    = AccessRepository.getInstance(applicationContext)
+        onlineRepository    = OnlineRepository(applicationContext, accessRepository)
+        musicRepository     = HybridMusicRepository(MusicRepositoryImpl(storageManager), onlineRepository)
         favoritesRepository = FavoritesRepository(this)
         historyRepository   = HistoryRepository(this)
         queueRepository     = QueueRepository(this)
+        queueRepository.importLegacyYouTube(onlineRepository.queue.value.map { "youtube:${it.song.videoId}" })
+        favoritesRepository.importLegacyYouTube(onlineRepository.favorites.value.map { "youtube:${it.videoId}" }.toSet())
+        historyRepository.importLegacyYouTube(onlineRepository.history.value.map { "youtube:${it.videoId}" })
         scoreRepository     = ScoreRepository(this)
         artworkRepository   = ArtworkRepository(this)
-        remoteQueueServer   = RemoteQueueServer(applicationContext, musicRepository, queueRepository, artworkRepository)
-        remoteQueueServer.start()
 
         hadStoragePermission = storageManager.hasAllFilesPermission()
 
@@ -78,17 +90,22 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     shape    = RectangleShape
                 ) {
+                    AccessGate(accessRepository) {
+                    val remote = remember { RemoteQueueServer(applicationContext, musicRepository, queueRepository, artworkRepository).also { remoteQueueServer = it } }
+                    DisposableEffect(remote) { remote.start(); onDispose { remote.close() } }
                     val navController = rememberNavController()
                     NavGraph(
                         navController       = navController,
                         musicRepository     = musicRepository,
+                        onlineRepository    = onlineRepository,
                         favoritesRepository = favoritesRepository,
                         historyRepository   = historyRepository,
                         queueRepository     = queueRepository,
                             scoreRepository     = scoreRepository,
                             artworkRepository  = artworkRepository,
-                            remoteUrl          = intent.getStringExtra("remote_url") ?: remoteQueueServer.localUrl()
+                            remoteUrl          = intent.getStringExtra("remote_url") ?: remote.localUrl()
                     )
+                    }
                 }
             }
         }
@@ -111,7 +128,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        remoteQueueServer.close()
+        if (::remoteQueueServer.isInitialized) remoteQueueServer.close()
         try {
             unregisterReceiver(mediaReceiver)
         } catch (_: IllegalArgumentException) {

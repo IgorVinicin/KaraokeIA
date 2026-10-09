@@ -1,0 +1,20 @@
+﻿{
+    "ConfigurationScriptSyntaxErrors":  0,
+    "Build":  "SUCCESS",
+    "LintErrors":  0,
+    "Apk":  "C:\\Users\\admin.igor\\Documents\\GitHub\\KaraokeIA\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+    "ApkSha256":  "E862FBFCEF09C399A0C855BB0DA5224FA2B37D67753D2779BA5F555B93815BA8",
+    "Device":  "Android TV API 34 x86 emulator",
+    "SearchByName":  "PASS",
+    "LookupByLink":  "PASS",
+    "QueueAddRemove":  "PASS",
+    "QueuePersistence":  "PASS",
+    "Playback":  "PASS",
+    "DpadPlayPause":  "PASS",
+    "BackgroundPause":  "PASS",
+    "OfflineCatalogueSongs":  51,
+    "ApiKeyEmbeddedInApk":  false,
+    "PhysicalTvBoxTested":  false,
+    "OnlineScoringSupported":  false,
+    "OnlineQrQueueSupported":  false
+}

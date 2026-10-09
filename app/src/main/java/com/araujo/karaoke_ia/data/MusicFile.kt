@@ -10,4 +10,8 @@ data class MusicFile(
     val title: String,
     val lyricsStart: String,
     val videoPath: String? = null
-)
+) {
+    val isOnline: Boolean get() = code.startsWith("youtube:")
+    val displayCode: String get() = if (isOnline) "YouTube" else code
+    val sourceLabel: String get() = if (isOnline) "YouTube · requer internet" else "No aparelho"
+}

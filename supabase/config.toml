@@ -1,0 +1,5 @@
+project_id = "luqgrtfqlywchlyasaog"
+
+[functions.accounts-api]
+# Login has no JWT yet. Handler verifies Auth tokens on every protected route.
+verify_jwt = false

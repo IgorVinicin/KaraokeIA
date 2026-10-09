@@ -2,6 +2,8 @@ package com.araujo.karaoke_ia.ui.home
 
 import com.araujo.karaoke_ia.ui.components.stageBackground
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import com.araujo.karaoke_ia.ui.components.BrandMark
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,7 +33,7 @@ import java.io.File
 
 /** Touch layout independent of the TV focus navigation, with one shared catalogue and queue. */
 @Composable
-internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit, onModes: () -> Unit = {}) {
+internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit, onStorageAccess: () -> Unit = {}, searchSettings: @Composable () -> Unit = {}) {
     val selected by viewModel.selectedTab
     val query by viewModel.searchQuery
     val all by viewModel.allMusics
@@ -64,8 +66,8 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                 Column(Modifier.widthIn(max = contentWidth).fillMaxSize().align(Alignment.TopCenter)
                     .padding(horizontal = if (wide) 24.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Mic, null, tint = GoldPrimary, modifier = Modifier.size(24.dp))
-                        Text("Karaokê", Modifier.weight(1f).padding(start = 8.dp), fontFamily = ReferenceHeadingFont,
+                        BrandMark(Modifier.size(30.dp))
+                        Text("SoltaVoz", Modifier.weight(1f).padding(start = 8.dp), fontFamily = ReferenceHeadingFont,
                             fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         IconButton(onClick = { historySelected = false; viewModel.onTabSelected(HomeTab.CONFIGURACOES) }) {
                             Icon(Icons.Default.Settings, "Configurações", tint = GoldPrimary)
@@ -89,8 +91,9 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                         selected == HomeTab.CONFIGURACOES -> {
                             Text("Configurações da sessão", fontFamily = ReferenceHeadingFont, color = TextWhite)
                             Text("Catálogo local: ${all.size} músicas", color = TextMuted)
-                            Button(onClick = onModes) { Text("Trocar modo online / offline") }
-                            OutlinedButton(onClick = { viewModel.loadAllMusics() }) { Text("Atualizar catálogo") }
+                            Button(onClick = onStorageAccess) { Text("Acessar músicas do aparelho") }
+                            searchSettings()
+                            OutlinedButton(onClick = { viewModel.loadAllMusics(forceRefresh = true) }) { Text("Atualizar catálogo") }
                             OutlinedButton(enabled = viewModel.artworkBatchProgress.value == null,
                                 onClick = { viewModel.fetchMissingArtwork() }) { Text("Buscar capas") }
                         }
@@ -98,9 +101,9 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                         viewModel.isLoading.value -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
-                        viewModel.loadError.value != null && all.isEmpty() -> {
-                            Text(viewModel.loadError.value ?: "Não foi possível carregar o catálogo")
-                            Button(onClick = { viewModel.loadAllMusics() }) { Text("Tentar novamente") }
+                        viewModel.loadError.value != null && all.isEmpty() && selected == HomeTab.INICIO && viewModel.historyMusics.value.isEmpty() -> {
+                            Text("Pesquise pelo nome para encontrar seu karaokê ou conecte suas músicas locais.")
+                            Button(onClick = { viewModel.onTabSelected(HomeTab.PESQUISAR) }) { Text("Pesquisar músicas") }
                         }
                         else -> {
                             val songs = when {
@@ -127,7 +130,12 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
                                     Text(progress?.let { "Buscando capas: ${it.completed}/${it.total}" } ?: "Buscar capas das músicas")
                                 }
                             }
-                            if (songs.isEmpty()) Text(when {
+                            if (selected == HomeTab.PESQUISAR) {
+                                viewModel.searchStatus.value?.let { Text(it, color = TextMuted) }
+                                if (viewModel.isSearching.value) LinearProgressIndicator(Modifier.fillMaxWidth())
+                                if (!viewModel.isSearching.value && songs.isEmpty() && query.trim().length >= 2) TextButton(onClick = { viewModel.onSearchQueryChange(query) }) { Text("Tentar novamente") }
+                            }
+                            if (songs.isEmpty() && !viewModel.isSearching.value) Text(when {
                                 selected == HomeTab.FILA -> "Adicione músicas pelo botão + no catálogo."
                                 selected == HomeTab.FAVORITOS -> "Toque no coração para salvar suas favoritas."
                                 historySelected -> "As músicas cantadas aparecem aqui."
@@ -154,13 +162,13 @@ internal fun MobileHomeScreen(viewModel: HomeViewModel, onPlay: (String) -> Unit
 @Composable
 private fun MobileSongRow(song: MusicFile, favorite: Boolean, queued: Boolean, isQueue: Boolean,
     onPlay: () -> Unit, onFavorite: () -> Unit, onQueue: () -> Unit) {
-    Column(Modifier.fillMaxWidth().background(DarkCardElevated, MaterialTheme.shapes.medium).padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().background(DarkCardElevated, MaterialTheme.shapes.medium).clickable(onClick = onPlay).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SongAlbumArt(song.code, song.title, song.artist, modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small))
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(song.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text(song.artist, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-                Text("Código ${song.code}", color = TextSubtle, fontSize = 11.sp)
+                Text("${song.artist} · ${song.sourceLabel}", color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                Text("${song.displayCode}", color = TextSubtle, fontSize = 11.sp)
             }
             IconButton(onClick = onFavorite) { Icon(if (favorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                 if (favorite) "Remover dos favoritos" else "Salvar favorita", tint = if (favorite) GoldPrimary else TextMuted) }

@@ -1,0 +1,38 @@
+{
+  "stage": "ready",
+  "snapshots": [
+    {
+      "url": "https://www.youtube.com/embed/_lMLH9L9kk8?playsinline=1&origin=https%3A%2F%2Fcom.araujo.karaoke_ia&controls=1&autoplay=0&enablejsapi=1&widgetid=1&forigin=https%3A%2F%2Fcom.araujo.karaoke_ia%2F&aoriginsup=1&vf=5",
+      "viewport": [
+        944,
+        263
+      ],
+      "video": [
+        {
+          "paused": true,
+          "time": 0,
+          "ready": 0
+        }
+      ]
+    },
+    {
+      "url": "https://com.araujo.karaoke_ia/",
+      "viewport": [
+        944,
+        264
+      ],
+      "iframe": {
+        "x": 0,
+        "y": 0,
+        "width": 944.6153564453125,
+        "height": 263.9903564453125,
+        "top": 0,
+        "right": 944.6153564453125,
+        "bottom": 263.9903564453125,
+        "left": 0
+      },
+      "state": 5,
+      "video": []
+    }
+  ]
+}

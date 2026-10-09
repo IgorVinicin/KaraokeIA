@@ -1,6 +1,8 @@
 package com.araujo.karaoke_ia.data
 
 import android.util.Log
+import android.util.AtomicFile
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -9,7 +11,12 @@ interface MusicRepository {
     fun scanAllMusics(forceRefresh: Boolean = false): List<MusicFile>
 }
 
-class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRepository {
+class MusicRepositoryImpl internal constructor(
+    private val rootPathProvider: () -> String,
+    private val catalogCacheFile: File
+) : MusicRepository {
+    constructor(storageManager: StorageManager) : this(
+        storageManager::refreshRootPath, storageManager.catalogCacheFile)
 
     @Volatile
     private var cachedMusics: List<MusicFile>? = null
@@ -17,6 +24,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
     @Volatile
     private var cachedRootPath: String? = null
     @Volatile private var cachedByCode: Map<String, MusicFile> = emptyMap()
+    private var cachedSignature: String? = null
 
     /**
      * Busca uma música específica pelo código.
@@ -26,7 +34,7 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
         val cleanCode = code.trim()
         if (cleanCode.isBlank()) return null
 
-        val rootPath = storageManager.refreshRootPath()
+        val rootPath = rootPathProvider()
         // A troca do pendrive invalida o caminho dos vídeos em memória.
         if (cachedRootPath == rootPath) {
             cachedByCode[cleanCode.trimStart('0').ifEmpty { "0" }]?.takeIf {
@@ -58,41 +66,93 @@ class MusicRepositoryImpl(private val storageManager: StorageManager) : MusicRep
      * Um arquivo é considerado válido quando existe o par [code].txt + [code].mp4.
      */
     @Synchronized override fun scanAllMusics(forceRefresh: Boolean): List<MusicFile> {
-        val rootPath = storageManager.refreshRootPath()
-        if (!forceRefresh && cachedMusics != null && cachedRootPath == rootPath) {
-            return cachedMusics!!
-        }
-
+        val rootPath = rootPathProvider()
         val rootDir = File(rootPath)
-        if (!rootDir.exists() || !rootDir.isDirectory) return emptyList()
+        if (!rootDir.isDirectory) {
+            cachedMusics = null
+            cachedByCode = emptyMap()
+            cachedRootPath = null
+            return emptyList()
+        }
 
         val result = mutableListOf<MusicFile>()
 
         try {
             val metadataDir = File(rootDir, "dados").takeIf { it.isDirectory } ?: rootDir
             // Index existing videos once instead of probing six absent paths for each metadata file.
-            val videoFiles = rootDir.listFiles().orEmpty()
-                .filter { it.extension.lowercase() in setOf("mp4", "mkv", "avi") && it.isFile }
-                .associateBy { it.name }
-            metadataDir.listFiles()?.forEach { file ->
-                if (file.extension.equals("txt", ignoreCase = true)) {
-                    val code = file.nameWithoutExtension
-                    val mp4File = listOf("mp4", "MP4", "mkv", "MKV", "avi", "AVI")
-                        .firstNotNullOfOrNull { videoFiles["$code.$it"] }
-                    if (mp4File != null && file.isFile) {
-                        parseMusicFile(file, mp4File, code)?.let { result.add(it) }
-                    }
+            val extensions = setOf("mp4", "mkv", "avi")
+            val videos = rootDir.listFiles() ?: return emptyList()
+            val metadata = metadataDir.listFiles() ?: return emptyList()
+            val videoFiles = videos.filter { it.extension.lowercase() in extensions && it.isFile }
+                .sortedBy { it.name }.associateBy { it.nameWithoutExtension }
+            val metadataFiles = metadata.filter { it.extension.equals("txt", true) && it.isFile }
+                .sortedBy { it.name }
+            // Stat entries to detect edits/removals; unchanged catalogues need no TXT parsing.
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            (metadataFiles + videoFiles.values).forEach {
+                digest.update("${it.name}\u0000${it.length()}\u0000${it.lastModified()}\n".toByteArray(Charsets.UTF_8))
+            }
+            val signature = digest.digest().joinToString("") { "%02x".format(it) }
+            if (!forceRefresh && cachedRootPath == rootPath && cachedSignature == signature) {
+                cachedMusics?.let { return it }
+            }
+            if (!forceRefresh) readCatalog(rootPath, signature)?.let {
+                rememberCatalog(rootPath, signature, it)
+                return it
+            }
+            metadataFiles.forEach { file ->
+                val code = file.nameWithoutExtension
+                videoFiles[code]?.let { video ->
+                    parseMusicFile(file, video, code)?.let { result.add(it) }
                 }
             }
+            val sorted = result.sortedBy { it.title.lowercase() }
+            rememberCatalog(rootPath, signature, sorted)
+            writeCatalog(rootPath, signature, sorted)
+            return sorted
         } catch (e: Exception) {
             Log.w("MusicRepository", "Falha ao ler o catálogo local", e)
         }
 
-        val sorted = result.sortedBy { it.title.lowercase() }
-        cachedByCode = sorted.associateBy { it.code.trimStart('0').ifEmpty { "0" } }
-        cachedMusics = sorted
-        cachedRootPath = rootPath
-        return sorted
+        return emptyList()
+    }
+
+    private fun rememberCatalog(root: String, signature: String, songs: List<MusicFile>) {
+        cachedByCode = songs.associateBy { it.code.trimStart('0').ifEmpty { "0" } }
+        cachedMusics = songs
+        cachedSignature = signature
+        cachedRootPath = root
+    }
+
+    private fun readCatalog(root: String, signature: String): List<MusicFile>? = runCatching {
+        val json = AtomicFile(catalogCacheFile).openRead().bufferedReader().use { JSONObject(it.readText()) }
+        if (json.getInt("version") != 1 || json.getString("root") != root || json.getString("signature") != signature) return null
+        val songs = json.getJSONArray("songs")
+        (0 until songs.length()).map { index ->
+            val song = songs.getJSONObject(index)
+            MusicFile(song.getString("code"), song.getString("fileName"), song.getString("artist"),
+                song.getString("title"), song.getString("lyricsStart"), song.getString("videoPath"))
+        }
+    }.getOrNull()
+
+    private fun writeCatalog(root: String, signature: String, songs: List<MusicFile>) {
+        val cache = AtomicFile(catalogCacheFile)
+        var stream: java.io.FileOutputStream? = null
+        try {
+            val entries = JSONArray()
+            songs.forEach { song ->
+                entries.put(JSONObject().put("code", song.code).put("fileName", song.fileName)
+                    .put("artist", song.artist).put("title", song.title).put("lyricsStart", song.lyricsStart)
+                    .put("videoPath", song.videoPath))
+            }
+            val json = JSONObject().put("version", 1).put("root", root).put("signature", signature).put("songs", entries)
+            stream = cache.startWrite()
+            stream.write(json.toString().toByteArray(Charsets.UTF_8))
+            cache.finishWrite(stream)
+        } catch (e: Exception) {
+            cache.failWrite(stream)
+            Log.w("MusicRepository", "Catálogo carregado sem cache persistente", e)
+        }
     }
 
     private fun findVideoFile(rootDir: File, code: String): File? {

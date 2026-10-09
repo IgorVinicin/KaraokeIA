@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.net.URI
 
 plugins {
     alias(libs.plugins.android.application)
@@ -12,6 +13,16 @@ val productionSigning = Properties().apply {
 val requiredSigningKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
 val signingReady = requiredSigningKeys.all { !productionSigning.getProperty(it).isNullOrBlank() }
 val productionKeystore = productionSigning.getProperty("storeFile")?.let { rootProject.file(it) }
+// Public service address only. The YouTube credential belongs exclusively to server/.env.
+val searchServiceUrl = providers.environmentVariable("SOLTAVOZ_SEARCH_URL").orElse("").get().trim().trimEnd('/')
+check(searchServiceUrl.isBlank() || (searchServiceUrl.startsWith("https://") &&
+    !searchServiceUrl.contains('"') && !searchServiceUrl.contains('\\') &&
+    !searchServiceUrl.contains('\n') && !searchServiceUrl.contains('\r') &&
+    runCatching { URI(searchServiceUrl) }.getOrNull()?.let {
+        it.host != null && it.userInfo == null && it.query == null && it.fragment == null
+    } == true)) {
+    "SOLTAVOZ_SEARCH_URL deve ser um endereço HTTPS público, sem credenciais ou parâmetros."
+}
 
 gradle.taskGraph.whenReady {
     if (allTasks.any { it.project == project && it.name.contains("Release") &&
@@ -30,8 +41,12 @@ android {
         applicationId = "com.araujo.karaoke_ia"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 5
+        versionName = "1.3.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SEARCH_SERVICE_URL", "\"$searchServiceUrl\"")
+        buildConfigField("String", "ACCESS_API_URL", "\"https://luqgrtfqlywchlyasaog.supabase.co/functions/v1/accounts-api\"")
+        buildConfigField("String", "OFFLINE_PUBLIC_KEY", "\"${rootProject.file("supabase/offline-public-key.txt").readText().trim()}\"")
     }
 
     signingConfigs {
@@ -62,6 +77,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.11"

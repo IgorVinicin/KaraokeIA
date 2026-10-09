@@ -1,5 +1,10 @@
 # Modo online
 
+**A partir do SoltaVoz 1.2, não há seleção de modo.** A busca procura primeiro
+no aparelho e consulta o YouTube automaticamente quando não encontra músicas.
+Veja a [biblioteca unificada](soltavoz-1.2.md). As seções abaixo descrevem o
+fluxo anterior e as formas de configurar a pesquisa.
+
 Ao iniciar, escolha offline (pendrive) ou online (YouTube). Voltar na tela principal
 offline retorna à seleção de modo; no online use Configurações → Trocar modo.
 As filas são independentes e persistem entre sessões.
@@ -16,6 +21,21 @@ use Reproduzir em tela cheia. Ao terminar, a música é removida da fila online
 e a tela de resultado permite confirmar a reprodução da próxima.
 
 ## Ativar busca por música/artista
+
+### Distribuir o SoltaVoz 1.1.0
+
+Use o [servidor de pesquisa](../server/README.md). A chave fica em `server/.env`
+ou nos segredos da hospedagem. Defina `SOLTAVOZ_SEARCH_URL` com o endereço HTTPS
+público antes de compilar o APK. Esse endereço é a única configuração que entra
+no app; não é uma credencial. Com o servidor configurado, o usuário pesquisa
+somente pelo nome da música/artista, sem configurar chave ou fornecer link.
+
+O campo de pesquisa sempre prioriza nomes. Links de vídeos ainda são aceitos
+como opção adicional; títulos com 11 caracteres não são confundidos com IDs.
+OK ou clique na capa abre diretamente o player. O serviço precisa ser hospedado
+e ter uma chave válida para a pesquisa funcionar na versão distribuída.
+
+### Uso pessoal e versões anteriores
 
 No APK release 1.0.1, use Online → Configurações → Configurar pesquisa por nome. Informe somente o valor da chave YouTube Data API e salve; é possível removê-la pelo mesmo painel. A chave é mascarada, armazenada com gravação atômica na área privada `no_backup` e não acompanha o APK. O `.env` do computador não configura automaticamente a TV Box.
 

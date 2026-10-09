@@ -27,4 +27,10 @@ class FavoritesRepository(private val context: Context) {
     }
 
     fun isFavorite(code: String): Boolean = getFavorites().contains(code)
+
+    fun importLegacyYouTube(codes: Set<String>) {
+        if (prefs.getBoolean("youtube_imported", false)) return
+        prefs.edit().putStringSet("favorites", getFavorites() + codes)
+            .putBoolean("youtube_imported", true).apply()
+    }
 }

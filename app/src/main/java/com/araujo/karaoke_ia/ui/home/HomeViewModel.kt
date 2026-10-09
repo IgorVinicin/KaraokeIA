@@ -13,6 +13,10 @@ import com.araujo.karaoke_ia.data.MusicRepository
 import com.araujo.karaoke_ia.data.QueueRepository
 import com.araujo.karaoke_ia.data.ScoreRepository
 import com.araujo.karaoke_ia.data.UserScoreEntry
+import com.araujo.karaoke_ia.data.HybridSongSearch
+import com.araujo.karaoke_ia.data.HybridMusicRepository
+import com.araujo.karaoke_ia.data.asMusicFile
+import com.araujo.karaoke_ia.online.OnlineRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,8 +45,14 @@ class HomeViewModel(
     private val historyRepo: HistoryRepository,
     private val queueRepo: QueueRepository,
     private val scoreRepo: ScoreRepository,
-    val artworkRepository: ArtworkRepository
+    val artworkRepository: ArtworkRepository,
+    val onlineRepository: OnlineRepository,
+    private val hybridSearch: HybridSongSearch = HybridSongSearch { query -> onlineRepository.search(query).map { it.asMusicFile() } }
 ) : ViewModel() {
+    private val _searchStatus = mutableStateOf<String?>(null)
+    val searchStatus: State<String?> = _searchStatus
+    private val _isSearching = mutableStateOf(false)
+    val isSearching: State<Boolean> = _isSearching
 
     // ── Busca / código ────────────────────────────────────────────────────────
 
@@ -151,6 +161,10 @@ class HomeViewModel(
 
     // ── Init ──────────────────────────────────────────────────────────────────
 
+    private var catalogLoadJob: kotlinx.coroutines.Job? = null
+    private var searchJob: kotlinx.coroutines.Job? = null
+    private var searchRevision = 0
+
     init {
         _favorites.value = favoritesRepo.getFavorites()
         _queueCodes.value = queueRepo.getQueue()
@@ -160,7 +174,21 @@ class HomeViewModel(
 
     fun loadScores() {
         _myBestScores.value = scoreRepo.getBestScores()
+        refreshHistoryMusics(_allMusics.value)
     }
+
+    fun refreshLibrary() {
+        _favorites.value = favoritesRepo.getFavorites()
+        _queueCodes.value = queueRepo.getQueue()
+        refreshFavoriteMusics(_allMusics.value)
+        refreshQueueMusics(_allMusics.value)
+        loadScores()
+    }
+
+    fun prepareSong(code: String): Boolean = !code.startsWith("youtube:") || musicRepository.findMusicByCode(code) != null
+
+    private fun availableLibrary(musics: List<MusicFile>) =
+        (musics + onlineRepository.savedSongs.map { it.asMusicFile() }).distinctBy { it.code }
 
     fun fetchMissingArtwork() {
         if (_artworkBatchProgress.value != null) return
@@ -183,12 +211,14 @@ class HomeViewModel(
     // ── Carregamento do HD ────────────────────────────────────────────────────
 
     fun loadAllMusics(forceRefresh: Boolean = false) {
-        viewModelScope.launch {
+        if (catalogLoadJob?.isActive == true) return
+        catalogLoadJob = viewModelScope.launch {
             _isLoading.value = true
             _loadError.value = null
 
             val musics = withContext(Dispatchers.IO) {
                 try { musicRepository.scanAllMusics(forceRefresh) }
+                catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                 catch (e: Exception) { emptyList() }
             }
 
@@ -206,6 +236,7 @@ class HomeViewModel(
             loadScores()
 
             _isLoading.value = false
+            if (_searchQuery.value.isNotBlank()) onSearchQueryChange(_searchQuery.value)
         }
     }
 
@@ -262,25 +293,46 @@ class HomeViewModel(
     }
 
     fun onSearchQueryChange(query: String) {
-        _searchQuery.value = query
-        applySearchFilter(query, _allMusics.value)
+        val cleanInput = query.take(160)
+        val revision = ++searchRevision
+        _searchQuery.value = cleanInput
+        searchJob?.cancel()
+        _searchStatus.value = null
+        _isSearching.value = cleanInput.isNotBlank()
+        _filteredMusics.value = emptyList()
+        _selectedSearchMusic.value = null
+        searchJob = viewModelScope.launch {
+            try {
+                kotlinx.coroutines.delay(180)
+                if (_isLoading.value) { _searchStatus.value = "Carregando músicas do aparelho…"; return@launch }
+                applySearchFilter(cleanInput, _allMusics.value)
+                if (revision != searchRevision) return@launch
+                if (_filteredMusics.value.isNotEmpty() || cleanInput.trim().length < 2) return@launch
+                _searchStatus.value = "Não encontrei no aparelho. Buscando karaokê no YouTube…"
+                // Pause before spending a network request while the user is still typing.
+                kotlinx.coroutines.delay(550)
+                val songs = hybridSearch.searchMissing(cleanInput, emptyList())
+                if (revision != searchRevision) return@launch
+                (musicRepository as? HybridMusicRepository)?.rememberResults(songs)
+                _filteredMusics.value = songs
+                _selectedSearchMusic.value = songs.firstOrNull()
+                _searchStatus.value = if (songs.isEmpty()) "Nenhum karaokê encontrado. Tente outro nome." else "${songs.size} versões de karaokê no YouTube"
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (revision == searchRevision) _searchStatus.value = error.message ?: "Não foi possível pesquisar no YouTube. Tente novamente."
+            } finally {
+                if (revision == searchRevision) _isSearching.value = false
+            }
+        }
     }
 
     fun selectSearchMusic(music: MusicFile) {
         _selectedSearchMusic.value = music
     }
 
-    private fun applySearchFilter(query: String, all: List<MusicFile>) {
-        val filtered = if (query.isBlank()) {
-            all
-        } else {
-            val q = query.trim().lowercase()
-            all.filter {
-                it.code.contains(q) ||
-                it.title.lowercase().contains(q) ||
-                it.artist.lowercase().contains(q)
-            }
-        }
+    private suspend fun applySearchFilter(query: String, all: List<MusicFile>) {
+        val filtered = withContext(Dispatchers.Default) { hybridSearch.localResults(query, all) }
+        if (query != _searchQuery.value || all !== _allMusics.value) return
         _filteredMusics.value = filtered
         if (filtered.isNotEmpty()) {
             if (_selectedSearchMusic.value == null || !filtered.contains(_selectedSearchMusic.value)) {
@@ -323,6 +375,7 @@ class HomeViewModel(
     // ── Favoritos ─────────────────────────────────────────────────────────────
 
     fun toggleFavorite(code: String) {
+        if (!prepareSong(code)) return
         favoritesRepo.toggleFavorite(code)
         val updated = favoritesRepo.getFavorites()
         _favorites.value = updated
@@ -331,20 +384,21 @@ class HomeViewModel(
 
     private fun refreshFavoriteMusics(musics: List<MusicFile>) {
         val favCodes = _favorites.value
-        _favoriteMusics.value = musics.filter { favCodes.contains(it.code) }
+        _favoriteMusics.value = availableLibrary(musics).filter { favCodes.contains(it.code) }
     }
 
     // ── Histórico ─────────────────────────────────────────────────────────────
 
     private fun refreshHistoryMusics(musics: List<MusicFile>) {
         val codes    = historyRepo.getHistory()
-        val musicMap = musics.associateBy { it.code }
+        val musicMap = availableLibrary(musics).associateBy { it.code }
         _historyMusics.value = codes.mapNotNull { musicMap[it] }
     }
 
     // ── Fila de Reservas ──────────────────────────────────────────────────────
 
     fun addToQueue(code: String): Boolean {
+        if (!prepareSong(code)) return false
         val added = queueRepo.addToQueue(code)
         _queueCodes.value = queueRepo.getQueue()
         refreshQueueMusics(_allMusics.value)
@@ -365,7 +419,7 @@ class HomeViewModel(
 
     private fun refreshQueueMusics(musics: List<MusicFile>) {
         val codes    = queueRepo.getQueue()
-        val musicMap = musics.associateBy { it.code }
+        val musicMap = availableLibrary(musics).associateBy { it.code }
         _queueMusics.value = codes.mapNotNull { musicMap[it] }
     }
 
@@ -377,10 +431,11 @@ class HomeViewModel(
         private val historyRepo: HistoryRepository,
         private val queueRepo: QueueRepository,
         private val scoreRepo: ScoreRepository,
-        private val artworkRepository: ArtworkRepository
+        private val artworkRepository: ArtworkRepository,
+        private val onlineRepository: OnlineRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            HomeViewModel(musicRepository, favoritesRepo, historyRepo, queueRepo, scoreRepo, artworkRepository) as T
+            HomeViewModel(musicRepository, favoritesRepo, historyRepo, queueRepo, scoreRepo, artworkRepository, onlineRepository) as T
     }
 }

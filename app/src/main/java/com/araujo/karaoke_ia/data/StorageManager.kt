@@ -15,6 +15,9 @@ import androidx.core.content.ContextCompat
 
 class StorageManager(private val context: Context) {
 
+    val catalogCacheFile: File
+        get() = File(context.applicationContext.cacheDir, "local_catalog_v1.json")
+
     var rootPath: String?
         get() = context.getSharedPreferences("storage_prefs", Context.MODE_PRIVATE)
             .getString("root_path", null)

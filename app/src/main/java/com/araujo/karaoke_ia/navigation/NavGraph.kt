@@ -1,6 +1,9 @@
 package com.araujo.karaoke_ia.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.runtime.DisposableEffect
@@ -28,9 +31,10 @@ import com.araujo.karaoke_ia.ui.player.PlayerViewModel
 import com.araujo.karaoke_ia.ui.score.ScoreScreen
 import androidx.compose.ui.platform.LocalContext
 import com.araujo.karaoke_ia.data.StorageManager
-import com.araujo.karaoke_ia.online.ModeScreen
 import com.araujo.karaoke_ia.online.OnlineRepository
 import com.araujo.karaoke_ia.online.OnlineScreen
+import com.araujo.karaoke_ia.online.OnlineSong
+import com.araujo.karaoke_ia.ui.components.SearchConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -48,6 +52,7 @@ sealed class Screen(val route: String) {
 fun NavGraph(
     navController: NavHostController,
     musicRepository: MusicRepository,
+    onlineRepository: OnlineRepository,
     favoritesRepository: FavoritesRepository,
     historyRepository: HistoryRepository,
     queueRepository: QueueRepository,
@@ -56,21 +61,31 @@ fun NavGraph(
         remoteUrl: String? = null
 ) {
     val context = LocalContext.current
-    val onlineRepository = remember { OnlineRepository(context.applicationContext) }
+    fun playSong(code: String) {
+        val videoId = code.removePrefix("youtube:")
+        val route = if (code.startsWith("youtube:") && OnlineRepository.validId(videoId)) "youtube/$videoId"
+            else Screen.Player.createRoute(code)
+        navController.navigate(route) { launchSingleTop = true }
+    }
     NavHost(
         navController    = navController,
-        startDestination = "modes"
+        startDestination = Screen.Home.route,
+        enterTransition = { fadeIn(tween(160)) },
+        exitTransition = { fadeOut(tween(100)) },
+        popEnterTransition = { fadeIn(tween(160)) },
+        popExitTransition = { fadeOut(tween(100)) }
     ) {
-        composable("modes") {
-            ModeScreen(onOffline = {
-                navController.navigate(Screen.Home.route)
-                val storage = StorageManager(context)
-                if (!storage.hasAllFilesPermission()) storage.requestAllFilesPermission()
-            }, onOnline = { navController.navigate("online") })
-        }
-        composable("online") {
+        composable("youtube/{videoId}", arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("videoId") ?: ""
+            val music = remember(id) { musicRepository.findMusicByCode("youtube:$id") }
             OnlineScreen(onlineRepository, scoreRepository, remoteUrl,
-                onModes = { navController.popBackStack("modes", false) })
+                onModes = { navController.popBackStack() },
+                initialSong = OnlineSong(id, music?.title ?: "Karaokê do YouTube", music?.artist ?: "YouTube"),
+                onSongPlayed = { historyRepository.addToHistory("youtube:$id") },
+                onPerformanceFinished = { score, feedback ->
+                    queueRepository.popNextIfMatches("youtube:$id")
+                    navController.navigate(Screen.Score.createRoute(score, feedback)) { popUpTo(Screen.Home.route) }
+                })
         }
         // ── Home ──────────────────────────────────────────────────────────────
         composable(Screen.Home.route) {
@@ -81,15 +96,17 @@ fun NavGraph(
                     historyRepo        = historyRepository,
                     queueRepo          = queueRepository,
                     scoreRepo          = scoreRepository,
-                    artworkRepository = artworkRepository
+                    artworkRepository = artworkRepository,
+                    onlineRepository = onlineRepository
                 )
             )
             HomeScreen(
                 onNavigateToPlayer = { code ->
-                    navController.navigate(Screen.Player.createRoute(code))
+                    if (homeViewModel.prepareSong(code)) playSong(code)
                 },
                 viewModel = homeViewModel,
-                onModes = { navController.popBackStack("modes", false) }
+                onStorageAccess = { StorageManager(context).requestAllFilesPermission() },
+                searchSettings = { SearchConfiguration(onlineRepository) }
             )
         }
 
@@ -116,6 +133,7 @@ fun NavGraph(
                 onBack    = { navController.popBackStack() },
                 onFinish  = { score, feedback ->
                     playerViewModel.recordScore(score)
+                    queueRepository.popNextIfMatches(musicCode)
                     navController.navigate(Screen.Score.createRoute(score, feedback)) {
                         popUpTo(Screen.Home.route)
                     }
@@ -171,9 +189,8 @@ fun NavGraph(
                     val next = nextCode?.takeIf { nextMusic?.code == codeToPlay }
                         ?.let { queueRepository.popNextIfMatches(it) }
                     if (next != null) {
-                        navController.navigate(Screen.Player.createRoute(codeToPlay)) {
-                            popUpTo(Screen.Home.route)
-                        }
+                        navController.popBackStack(Screen.Home.route, false)
+                        playSong(codeToPlay)
                     }
                 },
                 onBackToHome = {
